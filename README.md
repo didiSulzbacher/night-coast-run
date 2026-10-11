@@ -3,7 +3,7 @@
 A retro pseudo-3D driving game in a single HTML file. No build step, no dependencies: open `index.html` in a browser.
 
 ## Modes
-Endless run (with an oncoming lane), time trial, rival race, slalom jump, big jump, bullseye jump, stunt show, demolition derby, getaway and hot pursuit.
+Endless run (with an oncoming lane and police roadblocks the longer you survive), time trial, rival race, slalom jump, big jump, bullseye jump, stunt show, demolition derby, getaway and hot pursuit.
 
 ## Features
 - 7 vehicles with their own stats and abilities, plus garage upgrades bought with coins
