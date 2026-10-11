@@ -456,7 +456,7 @@ canvas{display:block;width:100%;height:100%}
   const LAPS = 3;
   const MAX_ENDLESS_TIME = 100; // the endless clock never holds more than this
   const MODES = [
-    { id: 'endless', name: 'Endless run', c: '#f6c453', d: 'Beat the clock between checkpoints. The oncoming lane scores x4 but brings the police.' },
+    { id: 'endless', name: 'Endless run', c: '#f6c453', d: 'Beat the clock between checkpoints. The oncoming lane scores x4 but brings the police, and after a minute they start setting up roadblocks.' },
     { id: 'laps', name: 'Time trial', c: '#5bc0eb', d: 'Three timed laps. Stars shave time off.' },
     { id: 'rivals', name: 'Rival race', c: '#e85d75', d: 'Three laps against three AI racers.' },
     { id: 'slalom', name: 'Slalom jump', c: '#f49ac1', d: 'Weave through gates and fly through hoops. Misses cost 3s.' },
@@ -2529,6 +2529,8 @@ canvas{display:block;width:100%;height:100%}
         if (V.plow) { sp.smashed = true; shake = 0.3; applyDamage(0.05); showToast('Smashed the roadblock!'); burst(lastPS.x, lastPS.y - lastPS.w * 0.5, ['#ff3b4f', '#f4e9d8', '#3b7bff'], 24); }
         else { sp.smashed = true; speed = maxSpeed * 0.08; shake = 0.6; endDrift(false); showToast('Hit the roadblock!'); applyDamage(0.25); }
       }
+      // passed roadblocks are gone, so they don't wait for the player on the next loop of the track
+      if (i !== fromIdx) { const old = segments[(i - 10 + segments.length) % segments.length]; old.sprites = old.sprites.filter(sp => sp.type !== 'roadblock'); }
       if (i === toIdx) break;
     }
   }
@@ -2728,6 +2730,18 @@ canvas{display:block;width:100%;height:100%}
   }
 
   let rbLastIdx = 0;
+  // endless: after the first minute the police start setting up roadblocks, more often the longer you last
+  const ENDLESS_RB_START = 60;
+  function endlessRoadblocks(dt) {
+    if (V.cop) return;
+    if (donutTime <= 0) roadblockCd -= dt;
+    if (roadblockCd <= 0) {
+      spawnRoadblock();
+      const ramp = U.limit((raceTime - ENDLESS_RB_START) / 180, 0, 1); // fully ramped 3 minutes after the first one
+      roadblockCd = 24 - ramp * 15 + Math.random() * 6;
+    }
+    const ni = findSeg(absPlayerZ()).index; checkRoadblocks(rbLastIdx, ni); rbLastIdx = ni;
+  }
   function extraModeStart() {
     rivals = []; suspect = null; clearTempSprites();
     endlessScore = 0; wrongWay = false; hp = 1; wreckedOut = false; hurtCd = 0;
@@ -2738,6 +2752,7 @@ canvas{display:block;width:100%;height:100%}
     else if (savedVehicle != null) { applyVehicle(savedVehicle, true); savedVehicle = null; }
     if (mode === 'rivals') spawnRivals();
     if (mode === 'getaway') { heat = 1; policeCd = 4; roadblockCd = 14; getawayLives = 3; }
+    if (mode === 'endless') roadblockCd = ENDLESS_RB_START;
     if (mode === 'pursuit') spawnSuspect();
     rbLastIdx = findSeg(absPlayerZ()).index;
   }
@@ -2745,7 +2760,7 @@ canvas{display:block;width:100%;height:100%}
     weatherTick(dt);
     damageFx();
     hurtCd = Math.max(0, hurtCd - dt);
-    if (mode === 'endless') endlessTick(dt);
+    if (mode === 'endless') { endlessTick(dt); endlessRoadblocks(dt); }
     if (mode === 'rivals') updateRivals(dt);
     if (mode === 'getaway') {
       heat = donutTime > 0 ? heat : 1;
