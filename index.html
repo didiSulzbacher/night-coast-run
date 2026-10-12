@@ -2518,7 +2518,7 @@ canvas{display:block;width:100%;height:100%}
   }
   function spawnRoadblock() {
     const idx = (findSeg(absPlayerZ()).index + 70) % segments.length;
-    segments[idx].sprites.push({ type: 'roadblock', gap: LANES[Math.floor(Math.random() * 3)], smashed: false, temp: true });
+    segments[idx].sprites.push({ type: 'roadblock', offset: 0, gap: LANES[Math.floor(Math.random() * 3)], smashed: false, temp: true });
     showToast('Roadblock ahead!');
   }
   function checkRoadblocks(fromIdx, toIdx) {
