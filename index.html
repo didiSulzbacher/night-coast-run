@@ -457,6 +457,7 @@ canvas{display:block;width:100%;height:100%}
   const MAX_ENDLESS_TIME = 100; // the endless clock never holds more than this
   const MODES = [
     { id: 'endless', name: 'Endless run', c: '#f6c453', d: 'Beat the clock between checkpoints. The oncoming lane scores x4 but brings the police, and after a minute they start setting up roadblocks.' },
+    { id: 'headon', name: 'Head-on rush', c: '#ff8a5b', d: 'Drive against the traffic and survive wave after wave: speeders, rush hour, convoys and roadblocks. Clearing a wave patches your car up.' },
     { id: 'laps', name: 'Time trial', c: '#5bc0eb', d: 'Three timed laps. Stars shave time off.' },
     { id: 'rivals', name: 'Rival race', c: '#e85d75', d: 'Three laps against three AI racers.' },
     { id: 'slalom', name: 'Slalom jump', c: '#f49ac1', d: 'Weave through gates and fly through hoops. Misses cost 3s.' },
@@ -469,7 +470,7 @@ canvas{display:block;width:100%;height:100%}
   ];
   function isHill() { return mode === 'bigjump' || mode === 'bullseye'; }
   function isLapRace() { return mode === 'laps' || mode === 'rivals'; }
-  function noTraffic() { return mode === 'slalom' || isHill(); }
+  function noTraffic() { return mode === 'slalom' || mode === 'headon' || isHill(); }
   function hasStars() { return !(mode === 'slalom' || isHill()); }
   function timeBonusMode() { return mode === 'endless' || mode === 'laps'; }
   function policeMode() { return mode === 'endless' || mode === 'laps' || mode === 'getaway'; }
@@ -2257,7 +2258,7 @@ canvas{display:block;width:100%;height:100%}
       m.classList.toggle('mid', hp < 0.6 && hp >= 0.3); m.classList.toggle('low', hp < 0.3);
       $('hpLabel').textContent = `Car health ${Math.ceil(hp * 100)}%`;
     }
-    $('scoreBox').classList.toggle('off', !(mode === 'endless' && state !== 'title'));
+    $('scoreBox').classList.toggle('off', !((mode === 'endless' || mode === 'headon') && state !== 'title'));
     $('hudScore').textContent = Math.floor(endlessScore).toLocaleString();
     nitroFill.style.width = (nitro * 100).toFixed(1) + '%';
     nitroMeter.classList.toggle('active', boosting);
@@ -2518,8 +2519,10 @@ canvas{display:block;width:100%;height:100%}
   }
   function spawnRoadblock() {
     const idx = (findSeg(absPlayerZ()).index + 70) % segments.length;
-    segments[idx].sprites.push({ type: 'roadblock', offset: 0, gap: LANES[Math.floor(Math.random() * 3)], smashed: false, temp: true });
+    const sp = { type: 'roadblock', offset: 0, gap: LANES[Math.floor(Math.random() * 3)], smashed: false, temp: true };
+    segments[idx].sprites.push(sp);
     showToast('Roadblock ahead!');
+    return { sp, z: idx * segLen };
   }
   function checkRoadblocks(fromIdx, toIdx) {
     for (let i = fromIdx; ; i = (i + 1) % segments.length) {
@@ -2627,6 +2630,7 @@ canvas{display:block;width:100%;height:100%}
     oncoming = [];
   }
   function placeOncoming(c, ahead) {
+    if (mode === 'headon') { placeHeadon(c, 250); return; }
     c.offset = ONC_X + (Math.random() - 0.5) * 0.12;
     c.speed = maxSpeed * (0.3 + Math.random() * 0.15);
     c.prevDz = undefined; c.knock = null;
@@ -2682,6 +2686,110 @@ canvas{display:block;width:100%;height:100%}
     updateOncoming(dt);
   }
 
+  // ---------- head-on rush: all traffic comes at you, in waves ----------
+  const HEADON_WAVES = [
+    { name: 'Light traffic', cars: 8, spd: 0.3 },
+    { name: 'Speeders', cars: 9, spd: 0.6 },
+    { name: 'Roadblocks', cars: 6, spd: 0.32, rb: 6 },
+    { name: 'Rush hour', cars: 18, spd: 0.28 },
+    { name: 'Convoy', cars: 16, spd: 0.4, convoy: true },
+    { name: 'Gauntlet', cars: 13, spd: 0.48, rb: 8 }
+  ];
+  const HEADON_WAVE_T = 25, HEADON_REST_T = 5, LANE_NAMES = ['left', 'centre', 'right'];
+  let hd = { n: 0, t: 0, rest: false, free: 0, freeT: 0, rbCd: 0, blocks: [] }, bestHeadon = 0;
+  try { bestHeadon = parseFloat(localStorage.getItem('ncr-best-headon')) || 0; } catch (e) {}
+  // every lap through the six waves comes back denser, faster and with more roadblocks
+  function headonWave() {
+    const base = HEADON_WAVES[hd.n % HEADON_WAVES.length], loop = Math.floor(hd.n / HEADON_WAVES.length);
+    return { ...base, cars: Math.round(base.cars * (1 + 0.3 * loop)), spd: Math.min(0.85, base.spd * (1 + 0.12 * loop)), rb: base.rb ? base.rb * Math.pow(0.8, loop) : loop >= 1 ? 14 : 0 };
+  }
+  function headonTarget() { return hd.rest ? 3 : headonWave().cars; }
+  function placeHeadon(c, minAhead) {
+    const w = headonWave();
+    if (oncoming.filter(o => !o.dead).length > headonTarget()) { // wave thinned out: retire this car
+      c.dead = true; const sg = findSeg(c.z), i = sg.cars.indexOf(c); if (i >= 0) sg.cars.splice(i, 1);
+      return;
+    }
+    const lanes = w.convoy && !hd.rest ? LANES.filter(l => l !== hd.free) : LANES;
+    c.speed = maxSpeed * (w.spd + (Math.random() - 0.5) * 0.06);
+    c.prevDz = undefined; c.knock = null;
+    for (let tries = 0; ; tries++) {
+      const lane = lanes[Math.floor(Math.random() * lanes.length)];
+      const z = U.increase(absPlayerZ(), (minAhead + Math.random() * 300) * segLen, trackLength);
+      // never let three cars line up side by side: there must always be a way through
+      const near = oncoming.filter(o => o !== c && !o.dead && !o.knock && Math.abs(wrapDz(o.z - z)) < 8 * segLen);
+      const used = new Set(near.map(o => o.lane));
+      if (tries < 10 && (used.has(lane) || used.size >= 2)) continue;
+      c.lane = lane; c.offset = lane + (Math.random() - 0.5) * 0.08;
+      moveCar(c, z);
+      return;
+    }
+  }
+  function addHeadonCar(minAhead) {
+    const color = ONC_COLORS[Math.floor(Math.random() * ONC_COLORS.length)];
+    const c = { isOncoming: true, color, dark: shade(color, 0.55), z: absPlayerZ(), offset: 0, lane: 0, speed: 0 };
+    findSeg(c.z).cars.push(c); oncoming.push(c);
+    placeHeadon(c, minAhead);
+  }
+  function startHeadon() {
+    clearOncoming();
+    hd = { n: 0, t: HEADON_REST_T, rest: true, free: 0, freeT: 0, rbCd: 0, blocks: [] };
+    for (let i = 0; i < headonTarget(); i++) addHeadonCar(60);
+    showToast('Wave 1 incoming');
+  }
+  function startWave() {
+    hd.rest = false; hd.t = HEADON_WAVE_T;
+    const w = headonWave();
+    hd.rbCd = w.rb ? 3 : 0;
+    if (w.convoy) { hd.free = LANES[Math.floor(Math.random() * 3)]; hd.freeT = 7; }
+    showToast(`Wave ${hd.n + 1}: ${w.name}${w.convoy ? `, keep ${LANE_NAMES[LANES.indexOf(hd.free)]}` : ''}`);
+  }
+  function headonTick(dt) {
+    hd.t -= dt;
+    if (hd.t <= 0) {
+      if (hd.rest) startWave();
+      else {
+        const bonus = 1000 * (hd.n + 1);
+        addPoints(bonus); hp = Math.min(1, hp + 0.15);
+        showToast(`Wave ${hd.n + 1} cleared! +${bonus.toLocaleString()} pts, car patched up`);
+        hd.n++; hd.rest = true; hd.t = HEADON_REST_T;
+      }
+    }
+    const w = headonWave();
+    if (!hd.rest && w.convoy && (hd.freeT -= dt) <= 0) {
+      hd.free = LANES.filter(l => l !== hd.free)[Math.floor(Math.random() * 2)]; hd.freeT = 7;
+      showToast(`Convoy shifting, keep ${LANE_NAMES[LANES.indexOf(hd.free)]}`);
+    }
+    for (let i = oncoming.filter(o => !o.dead).length; i < headonTarget(); i++) addHeadonCar(250);
+    if (!hd.rest && w.rb && (hd.rbCd -= dt) <= 0) {
+      hd.blocks.push(spawnRoadblock());
+      hd.rbCd = w.rb * (0.85 + Math.random() * 0.3);
+    }
+    const ni = findSeg(absPlayerZ()).index; checkRoadblocks(rbLastIdx, ni); rbLastIdx = ni;
+    // oncoming cars that reach a roadblock outside its gap pile into it
+    const pz = absPlayerZ();
+    hd.blocks = hd.blocks.filter(b => !b.sp.smashed && wrapDz(b.z - pz) > -20 * segLen);
+    for (const b of hd.blocks) for (const c of oncoming) {
+      if (c.dead || c.knock || Math.abs(c.offset - b.sp.gap) < 0.3) continue;
+      const d = wrapDz(c.z - b.z);
+      if (d < 0 && d > -2 * segLen) {
+        c.knock = { t: 0, dir: c.offset < b.sp.gap ? -1 : 1 };
+        if (c.sx != null) burst(c.sx, c.sy, ['#ffb347', '#ff5e3a', '#fff4c2'], 16);
+      }
+    }
+    addPoints(dt * speed * M * 2);
+    updateOncoming(dt);
+    if (oncoming.some(o => o.dead)) oncoming = oncoming.filter(o => !o.dead);
+  }
+  function endHeadon() {
+    if (state !== 'play') return;
+    state = 'over';
+    endlessScore = Math.floor(endlessScore);
+    const pb = endlessScore > bestHeadon;
+    if (pb) { bestHeadon = endlessScore; try { localStorage.setItem('ncr-best-headon', String(bestHeadon)); } catch (e) {} }
+    showOver(pb ? 'New high score!' : 'Wrecked!', `Score <b>${endlessScore.toLocaleString()}</b> (best ${bestHeadon.toLocaleString()})<br>You reached wave <b>${hd.n + 1}</b> and drove <b>${km().toFixed(1)}</b> km`, Math.round(endlessScore / 1000));
+  }
+
   const WX_MSG = { clear: 'Skies clearing', rain: 'Rain rolling in', fog: 'Fog coming down', snow: 'Snow starting to fall' };
   function weatherTick(dt) {
     fogDensity += (fogTarget - fogDensity) * Math.min(1, dt * 1.2);
@@ -2697,7 +2805,7 @@ canvas{display:block;width:100%;height:100%}
 
   // ---------- vehicle damage ----------
   let hp = 1, wreckedOut = false, hurtCd = 0;
-  function damageMode() { return ['endless', 'stunt', 'derby', 'getaway', 'pursuit'].includes(mode); }
+  function damageMode() { return ['endless', 'headon', 'stunt', 'derby', 'getaway', 'pursuit'].includes(mode); }
   function dmgMul() {
     const tough = VEHICLES[vehicleId].bars[3];
     return ({ 1: 1.6, 2: 1.25, 3: 1, 4: 0.7, 5: 0.45 })[tough] * Math.pow(0.85, lvl(vehicleId, 'armor'));
@@ -2715,6 +2823,7 @@ canvas{display:block;width:100%;height:100%}
     wreckedOut = true; speed = 0;
     burst(lastPS.x, lastPS.y - lastPS.w * 0.3, ['#ff5e3a', '#ffb347', '#3a3150', '#f4e9d8'], 40);
     if (mode === 'endless') endGame();
+    else if (mode === 'headon') endHeadon();
     else if (mode === 'stunt') { endDrift(false); finishTimed('stunt'); }
     else if (mode === 'derby') finishTimed('derby');
     else if (mode === 'getaway') endGetaway(false);
@@ -2746,7 +2855,7 @@ canvas{display:block;width:100%;height:100%}
     rivals = []; suspect = null; clearTempSprites();
     endlessScore = 0; wrongWay = false; hp = 1; wreckedOut = false; hurtCd = 0;
     if (weatherId === 'random') applyWeather('random');
-    if (mode === 'endless') spawnOncoming(); else clearOncoming();
+    if (mode === 'endless') spawnOncoming(); else if (mode === 'headon') startHeadon(); else clearOncoming();
     stuntScore = 0; stuntMult = 1; comboT = 0; driftPts = 0; wrecks = 0;
     if (mode === 'pursuit') { if (savedVehicle == null) savedVehicle = vehicleId; applyVehicle('police', true); }
     else if (savedVehicle != null) { applyVehicle(savedVehicle, true); savedVehicle = null; }
@@ -2761,6 +2870,7 @@ canvas{display:block;width:100%;height:100%}
     damageFx();
     hurtCd = Math.max(0, hurtCd - dt);
     if (mode === 'endless') { endlessTick(dt); endlessRoadblocks(dt); }
+    if (mode === 'headon') headonTick(dt);
     if (mode === 'rivals') updateRivals(dt);
     if (mode === 'getaway') {
       heat = donutTime > 0 ? heat : 1;
@@ -2786,6 +2896,14 @@ canvas{display:block;width:100%;height:100%}
     if (mode === 'derby') { timeLeft -= dt; if (timeLeft <= 0) { timeLeft = 0; finishTimed('derby'); } }
   }
   function extraModeHud() {
+    if (mode === 'headon') {
+      const w = headonWave();
+      hudTime.textContent = `Wave ${hd.n + 1}`;
+      clockLabel.textContent = state === 'over' ? 'Wrecked'
+        : hd.rest ? `Next wave in ${Math.ceil(hd.t)}s`
+        : `${w.name}${w.convoy ? `, keep ${LANE_NAMES[LANES.indexOf(hd.free)]}` : ''}, ${Math.ceil(hd.t)}s`;
+      return true;
+    }
     if (mode === 'getaway') { hudTime.textContent = Math.ceil(timeLeft); clockLabel.textContent = state === 'over' ? 'Finished' : 'Survive'; return true; }
     if (mode === 'stunt') {
       hudTime.textContent = stuntScore.toLocaleString();
@@ -2976,6 +3094,7 @@ canvas{display:block;width:100%;height:100%}
     if (bestRace > 0) parts.push(`best race ${fmt(bestRace)}`);
     if (bestSlalom > 0) parts.push(`best slalom ${fmt(bestSlalom)}`);
     if (bestEndless > 0) parts.push(`endless ${bestEndless.toLocaleString()} pts`);
+    if (bestHeadon > 0) parts.push(`head-on ${bestHeadon.toLocaleString()} pts`);
     if (bestJump > 0) parts.push(`longest jump ${bestJump.toFixed(1)} m`);
     if (bestBull > 0) parts.push(`bullseye ${bestBull} pts`);
     if (bestStunt > 0) parts.push(`stunt ${bestStunt.toLocaleString()}`);
