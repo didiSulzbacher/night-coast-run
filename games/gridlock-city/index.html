@@ -113,6 +113,8 @@ canvas#c{display:block;width:100%;height:100%}
 .keys b{color:var(--ink)}
 .tips{font-size:15px;color:var(--muted);margin:16px auto 0;max-width:46ch;line-height:1.45}
 .touch-on .keys{display:none}
+#cityMap{display:block;width:min(340px,78vw);aspect-ratio:1;margin:16px auto 6px;border-radius:12px;border:1.5px solid var(--edge)}
+.maplegend{margin:0;font-size:14px;color:var(--muted)}
 </style>
 </head>
 <body>
@@ -173,6 +175,8 @@ canvas#c{display:block;width:100%;height:100%}
     <div class="card">
       <h2 class="title">Paused</h2>
       <p class="rec" id="pauseRec"></p>
+      <canvas id="cityMap" aria-label="City map"></canvas>
+      <p class="maplegend"><span style="color:#fff">●</span> You &nbsp;<span style="color:#f6c453">●</span> Phones and jobs &nbsp;<span style="color:#ff4fa3">●</span> Spray shops</p>
       <div style="margin-top:18px">
         <button class="btn" id="resumeBtn">Resume</button>
         <button class="btn alt" id="soundBtn">Sound: on</button>
@@ -191,7 +195,7 @@ const mini = document.getElementById('mini'), mctx = mini.getContext('2d');
 const $ = id => document.getElementById(id);
 
 // ---------- constants & helpers
-const T = 64, N = 80, CAMH = 1000, STEP = 1 / 60;
+const T = 64, N = 160, CAMH = 1000, STEP = 1 / 60;
 const WATER = 0, ROAD = 1, SIDE = 2, BLD = 3, GRASS = 4, PARK = 5, PLAZA = 6, ALLEY = 7, SPRAY = 8;
 const DX = [0, 1, 0, -1], DY = [-1, 0, 1, 0], DANG = [-Math.PI / 2, 0, Math.PI / 2, Math.PI];
 const NONE = 0, PLAYER = 1, CIV = 2, COP = 3;
@@ -224,6 +228,7 @@ const tree = new Uint8Array(N * N), trnd = new Uint8Array(N * N);
 const treeX = new Float32Array(N * N), treeY = new Float32Array(N * N), treeR = new Float32Array(N * N);
 const treeList = [], buildings = [], booths = [], sprays = [], weaponSpots = [], healthSpots = [], parkedSpots = [];
 let hospital = null, station = null;
+const hubs = [];
 
 const PAL = [['#8c7f73', '#a99b8d'], ['#7a4b3f', '#9a6656'], ['#5f6b78', '#7d8998'], ['#a58f62', '#c4ad7d'],
   ['#4d6f6a', '#67918b'], ['#6a5a7a', '#8a789c'], ['#8b8f96', '#b1b5bc'], ['#9b5b45', '#b9775f'], ['#56607a', '#3f4a66']];
@@ -241,7 +246,8 @@ function addTree(x, y) {
 
 function makeBuilding(x0, y0, x1, y1) {
   for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) map[idx(x, y)] = BLD;
-  const c = Math.min(1, Math.hypot((x0 + x1) / 2 - N / 2, (y0 + y1) / 2 - N / 2) / (N * .5));
+  let c = 1;
+  for (const h of hubs) c = Math.min(c, Math.hypot((x0 + x1) / 2 - h.x, (y0 + y1) / 2 - h.y) / (N * .22));
   const h = clamp((50 + (1 - c) * (1 - c) * 240) * (.6 + srand() * .7), 36, 320);
   const p = PAL[Math.floor(srand() * PAL.length)];
   const b = { x0: x0 * T, y0: y0 * T, x1: (x1 + 1) * T, y1: (y1 + 1) * T, h, roof: p[1],
@@ -282,6 +288,8 @@ function genCity() {
   for (const a of [treeList, buildings, booths, sprays, weaponSpots, healthSpots, parkedSpots]) a.length = 0;
   for (let i = 0; i < N * N; i++) trnd[i] = Math.floor(srand() * 256);
   for (let y = 2; y <= N - 3; y++) for (let x = 2; x <= N - 3; x++) map[idx(x, y)] = SIDE;
+  hubs.length = 0;
+  for (let k = 0; k < 3; k++) hubs.push({ x: N * (.2 + srand() * .6), y: N * (.2 + srand() * .6) });
 
   const lines = () => { const o = [3]; let x = 3; for (;;) { const nx = x + 2 + sri(7, 11); if (nx > N - 12) break; o.push(nx); x = nx; } o.push(N - 5); return o; };
   const vr = lines(), hr = lines();
@@ -289,15 +297,18 @@ function genCity() {
   for (const x of vr) for (let y = 3; y <= N - 4; y++) for (let c = 0; c < 2; c++) { const i = idx(x + c, y); map[i] = ROAD; lv[i] = c ? 0 : 2; }
   for (const y of hr) for (let x = 3; x <= N - 4; x++) for (let c = 0; c < 2; c++) { const i = idx(x, y + c); map[i] = ROAD; lh[i] = c ? 1 : 3; }
 
+  const rj = (hr.length - 1) >> 1;
+  for (let y = hr[rj] + 3; y <= hr[rj + 1] - 2; y++) for (let x = 2; x <= N - 3; x++) if (map[idx(x, y)] !== ROAD) map[idx(x, y)] = WATER;
+
   const blocks = [];
   for (let i = 0; i < vr.length - 1; i++) for (let j = 0; j < hr.length - 1; j++)
-    blocks.push({ x0: vr[i] + 2, y0: hr[j] + 2, x1: vr[i + 1] - 1, y1: hr[j + 1] - 1 });
+    if (j !== rj) blocks.push({ x0: vr[i] + 2, y0: hr[j] + 2, x1: vr[i + 1] - 1, y1: hr[j + 1] - 1 });
   for (let i = blocks.length - 1; i > 0; i--) { const j = Math.floor(srand() * (i + 1)); [blocks[i], blocks[j]] = [blocks[j], blocks[i]]; }
 
   blocks.forEach((b, k) => {
     const ix0 = b.x0 + 1, iy0 = b.y0 + 1, ix1 = b.x1 - 1, iy1 = b.y1 - 1;
     const r = srand();
-    const type = k < 3 ? 'parking' : r < .64 ? 'buildings' : r < .79 ? 'park' : r < .92 ? 'parking' : 'plaza';
+    const type = k < 6 ? 'parking' : r < .64 ? 'buildings' : r < .79 ? 'park' : r < .92 ? 'parking' : 'plaza';
     b.type = type;
     if (type === 'buildings') lots(ix0, iy0, ix1, iy1, 0);
     else if (type === 'park') {
@@ -309,12 +320,12 @@ function genCity() {
       }
     } else if (type === 'parking') {
       for (let y = iy0; y <= iy1; y++) for (let x = ix0; x <= ix1; x++) map[idx(x, y)] = PARK;
-      if (k < 3) {
+      if (k < 6) {
         for (let y = iy0; y <= iy0 + 1; y++) for (let x = ix0; x <= ix0 + 1; x++) map[idx(x, y)] = SPRAY;
         sprays.push({ x: (ix0 + 1) * T, y: (iy0 + 1) * T });
       }
       for (let y = iy0; y <= iy1; y++) for (let x = ix0; x <= ix1; x++)
-        if (map[idx(x, y)] === PARK && srand() < .42) parkedSpots.push({ x: (x + .5) * T, y: (y + .5) * T, a: srand() < .5 ? -Math.PI / 2 : Math.PI / 2, car: null });
+        if (map[idx(x, y)] === PARK && srand() < .3) parkedSpots.push({ x: (x + .5) * T, y: (y + .5) * T, a: srand() < .5 ? -Math.PI / 2 : Math.PI / 2, car: null });
     } else {
       for (let y = iy0; y <= iy1; y++) for (let x = ix0; x <= ix1; x++) map[idx(x, y)] = PLAZA;
       addTree(ix0, iy0); addTree(ix1, iy0); addTree(ix0, iy1); addTree(ix1, iy1);
@@ -322,8 +333,8 @@ function genCity() {
   });
 
   // phone booths on the top sidewalk of a few blocks
-  const bb = blocks.slice(3).sort(() => srand() - .5);
-  for (let k = 0; k < 7 && k < bb.length; k++) {
+  const bb = blocks.slice(6).sort(() => srand() - .5);
+  for (let k = 0; k < 20 && k < bb.length; k++) {
     const b = bb[k], mx = (b.x0 + b.x1) >> 1;
     booths.push({ x: (mx + .5) * T, y: b.y0 * T + T * .72, cool: 0 });
   }
@@ -334,8 +345,8 @@ function genCity() {
     if ((t === ALLEY || t === PLAZA || t === GRASS || t === SIDE) && !tree[idx(x, y)]) cand.push([x, y, t]);
   }
   const pref = cand.filter(c => c[2] !== SIDE);
-  for (let k = 0; k < 18; k++) { const c = (k % 3 ? pref : cand)[Math.floor(srand() * (k % 3 ? pref : cand).length)]; weaponSpots.push({ x: (c[0] + .5) * T, y: (c[1] + .5) * T }); }
-  for (let k = 0; k < 10; k++) { const c = cand[Math.floor(srand() * cand.length)]; healthSpots.push({ x: (c[0] + .5) * T, y: (c[1] + .5) * T }); }
+  for (let k = 0; k < 50; k++) { const c = (k % 3 ? pref : cand)[Math.floor(srand() * (k % 3 ? pref : cand).length)]; weaponSpots.push({ x: (c[0] + .5) * T, y: (c[1] + .5) * T }); }
+  for (let k = 0; k < 26; k++) { const c = cand[Math.floor(srand() * cand.length)]; healthSpots.push({ x: (c[0] + .5) * T, y: (c[1] + .5) * T }); }
 
   // respawn points: hospital near the middle, police station somewhere else
   let best = null, bd = 1e9;
@@ -1206,20 +1217,20 @@ function startMission(booth) {
     let pk = null;
     for (let k = 0; k < 40 && !pk; k++) { const p = randomPoint([SIDE], 500, 1100); if (p && nextToRoad(p)) pk = p; }
     let dr = null;
-    if (pk) for (let k = 0; k < 40 && !dr; k++) { const p = randomPoint([SIDE], 1000, 2000); if (p && nextToRoad(p) && Math.hypot(p.x - pk.x, p.y - pk.y) > 800) dr = p; }
+    if (pk) for (let k = 0; k < 40 && !dr; k++) { const p = randomPoint([SIDE], 1100, 2600); if (p && nextToRoad(p) && Math.hypot(p.x - pk.x, p.y - pk.y) > 900) dr = p; }
     if (pk && dr) {
       m.pick = pk; m.drop = dr; m.target = pk; m.title = 'Fare'; m.text = 'Pick up the fare in any car.';
       const f = makePed(pk.x, pk.y, 'fare'); f.state = 'wait'; peds.push(f); m.fare = f;
     } else m.type = 'courier';
   }
   if (m.type === 'courier') {
-    const p = randomPoint([SIDE, PLAZA, ALLEY], 900, 2000) || hospital;
+    const p = randomPoint([SIDE, PLAZA, ALLEY], 900, 2800) || hospital;
     const d = Math.hypot(p.x - player.x, p.y - player.y);
     m.target = p; m.time = Math.round(d / 230 + 15); m.reward = Math.round((300 + d * .5) / 10) * 10;
     m.title = 'Courier'; m.text = 'Rush the package to the marker.';
   } else if (m.type === 'delivery') {
     m.want = pick(JOB_CARS);
-    m.target = randomPoint([PARK], 800, 2400) || randomPoint([SIDE], 800, 2000) || hospital;
+    m.target = randomPoint([PARK], 900, 3200) || randomPoint([SIDE], 900, 2600) || hospital;
     m.time = 210; m.reward = 1000; m.title = 'Car order';
     m.text = `A buyer wants a ${CARS[m.want].name}. Bring one to the marker.`;
   } else if (m.type === 'getaway') {
@@ -1482,8 +1493,8 @@ function updCam(dt) {
     const zt = Math.min(SW, SH) / ((v ? 880 : 720) + Math.min(sp, 480) * 1.1);
     zoom += (zt - zoom) * (1 - Math.exp(-1.8 * dt));
   } else {
-    cam.x = N * T / 2 + Math.cos(time * .03) * 1300;
-    cam.y = N * T / 2 + Math.sin(time * .03) * 1300;
+    cam.x = N * T / 2 + Math.cos(time * .02) * N * T * .3;
+    cam.y = N * T / 2 + Math.sin(time * .02) * N * T * .3;
     zoom = Math.min(SW, SH) / 1000;
   }
 }
@@ -1522,6 +1533,8 @@ function drawGround(x0, y0, x1, y1) {
           if (isInter(tx - 1, ty)) for (let k = 0; k < 4; k++) ctx.fillRect(X + 3, Y + 5 + k * 15, 22, 8);
           if (isInter(tx + 1, ty)) for (let k = 0; k < 4; k++) ctx.fillRect(X + T - 25, Y + 5 + k * 15, 22, 8);
         }
+        if (tx > 0 && map[i - 1] === WATER) { ctx.fillStyle = '#b9b7c2'; ctx.fillRect(X, Y, 5, S); ctx.fillStyle = '#6d6b76'; ctx.fillRect(X, Y + 28, 5, 6); }
+        if (tx < N - 1 && map[i + 1] === WATER) { ctx.fillStyle = '#b9b7c2'; ctx.fillRect(X + T - 5, Y, 5, S); ctx.fillStyle = '#6d6b76'; ctx.fillRect(X + T - 5, Y + 28, 5, 6); }
         if (r < 12) { ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.fillRect(X + (r * 5) % 44, Y + (r * 3) % 44, 14, 8); }
         break;
       }
@@ -1759,20 +1772,45 @@ function render() {
   }
   drawMini();
 }
+const MINI_TILES = 56;
 function drawMini() {
   if (state !== 'play') return;
-  const W = mini.width, s = W / (N * T);
+  const W = mini.width, P = player.car || player, s = W / (MINI_TILES * T);
+  const ox = P.x - MINI_TILES * T / 2, oy = P.y - MINI_TILES * T / 2;
+  mctx.fillStyle = '#1d4b80'; mctx.fillRect(0, 0, W, W);
   mctx.imageSmoothingEnabled = false;
-  mctx.drawImage(mm, 0, 0, W, W);
-  const dot = (x, y, r, c) => { mctx.fillStyle = c; mctx.beginPath(); mctx.arc(x * s, y * s, r, 0, 6.28); mctx.fill(); };
-  if (!mission) for (const b of booths) if (b.cool <= 0) dot(b.x, b.y, 3, '#f6c453');
-  for (const v of cars) if (v.chase && !v.gone) dot(v.x, v.y, 2.5, (time * 4 | 0) % 2 ? '#ff3b4f' : '#4f8bff');
+  // copy the visible part of the 2px-per-tile city image, clipped to its edges
+  const k = W / (MINI_TILES * 2);
+  let sx = ox / T * 2, sy = oy / T * 2, sw = MINI_TILES * 2, sh = MINI_TILES * 2, dx = 0, dy = 0;
+  if (sx < 0) { dx = -sx * k; sw += sx; sx = 0; }
+  if (sy < 0) { dy = -sy * k; sh += sy; sy = 0; }
+  sw = Math.min(sw, mm.width - sx); sh = Math.min(sh, mm.height - sy);
+  if (sw > 0 && sh > 0) mctx.drawImage(mm, sx, sy, sw, sh, dx, dy, sw * k, sh * k);
+  const dot = (x, y, r, c, edge) => {
+    let px = (x - ox) * s, py = (y - oy) * s;
+    if (px < 0 || py < 0 || px > W || py > W) { if (!edge) return; px = clamp(px, r + 2, W - r - 2); py = clamp(py, r + 2, W - r - 2); }
+    mctx.fillStyle = c; mctx.beginPath(); mctx.arc(px, py, r, 0, 6.28); mctx.fill();
+  };
+  if (!mission) for (const b of booths) if (b.cool <= 0) dot(b.x, b.y, 3, '#f6c453', false);
+  for (const v of cars) if (v.chase && !v.gone) dot(v.x, v.y, 2.5, (time * 4 | 0) % 2 ? '#ff3b4f' : '#4f8bff', false);
   const mp = missionPoint();
-  if (mp) dot(mp.x, mp.y, 3 + Math.sin(time * 6), mission.type === 'hit' ? '#ff4f6d' : '#f6c453');
-  const P = player.car || player, a = player.car ? player.car.a : player.a;
-  mctx.save(); mctx.translate(P.x * s, P.y * s); mctx.rotate(a);
+  if (mp) dot(mp.x, mp.y, 3.5 + Math.sin(time * 6), mission.type === 'hit' ? '#ff4f6d' : '#f6c453', true);
+  const a = player.car ? player.car.a : player.a;
+  mctx.save(); mctx.translate(W / 2, W / 2); mctx.rotate(a);
   mctx.fillStyle = '#fff'; mctx.beginPath(); mctx.moveTo(6, 0); mctx.lineTo(-4, -4); mctx.lineTo(-4, 4); mctx.closePath(); mctx.fill();
   mctx.restore();
+}
+function drawCityMap() {
+  const c = $('cityMap'), r = c.getBoundingClientRect(), W = Math.round((r.width || 300) * DPR);
+  c.width = c.height = W;
+  const g = c.getContext('2d'), s = W / (N * T);
+  g.imageSmoothingEnabled = false; g.drawImage(mm, 0, 0, W, W);
+  const dot = (x, y, rad, col) => { g.fillStyle = col; g.beginPath(); g.arc(x * s, y * s, rad * DPR, 0, 6.28); g.fill(); };
+  for (const sp of sprays) dot(sp.x, sp.y, 3, '#ff4fa3');
+  if (!mission) for (const b of booths) if (b.cool <= 0) dot(b.x, b.y, 3, '#f6c453');
+  const mp = missionPoint(); if (mp) dot(mp.x, mp.y, 4, '#f6c453');
+  const P = player.car || player;
+  dot(P.x, P.y, 5, '#15151d'); dot(P.x, P.y, 3.5, '#fff');
 }
 
 // ---------- HUD
@@ -1885,6 +1923,7 @@ function pause(p) {
   if (p && state === 'play') {
     state = 'paused'; $('pauseScreen').hidden = false;
     $('pauseRec').textContent = `Cash ${money(cash)} · Best ${money(rec.best)} · Jobs done ${rec.jobs}`;
+    drawCityMap();
     for (const k in touch) touch[k] = false;
     save();
   } else if (!p && state === 'paused') { state = 'play'; $('pauseScreen').hidden = true; }
