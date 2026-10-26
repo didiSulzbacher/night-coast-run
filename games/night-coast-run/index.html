@@ -958,6 +958,13 @@ canvas{display:block;width:100%;height:100%}
     endDrift(true);
     vz = v; jumpZ = 1; airTime = 0; fromRamp = ramp; clearedCars = new Set();
   }
+  function crushCar(car) {
+    knockCar(car); addTime(2); shake = 0.4; questEvent('crush', 1);
+    if (mode === 'endless' || mode === 'headon') addPoints(300, 'Crushed');
+    showToast(timeBonusMode() ? `Crushed! ${sgn(2)}` : 'Crushed!');
+  }
+  // the monster truck flattens any car it comes down on, not only one in the exact spot it touches down
+  function canCrush() { return V.crush && !flying && vz < 0 && jumpZ > 0; }
   function land(seg) {
     jumpZ = 0; vz = 0;
     if (state !== 'play') return;
@@ -966,11 +973,7 @@ canvas{display:block;width:100%;height:100%}
       if (car.knock) continue;
       if (U.overlap(playerX, PW, car.offset, CAR_U, 0.8)) {
         clearedCars.delete(car);
-        if (V.crush) {
-          knockCar(car); addTime(2); shake = 0.4; questEvent('crush', 1);
-          showToast(`Crushed! ${sgn(2)}`);
-          return;
-        }
+        if (V.crush) { crushCar(car); return; }
         addHeat(0.3);
         speed = Math.min(speed, car.speed * 0.6); shake = 0.45; applyDamage(0.2);
         showToast('Rough landing'); stuntCrash();
@@ -1197,7 +1200,10 @@ canvas{display:block;width:100%;height:100%}
       airTime += dt;
       if (playing) {
         for (const car of playerSeg.cars) {
-          if (!flying && !car.knock && U.overlap(playerX, PW, car.offset, CAR_U, 1)) clearedCars.add(car);
+          if (!flying && !car.knock && U.overlap(playerX, PW, car.offset, CAR_U, 1)) {
+            if (canCrush() && state === 'play') { clearedCars.delete(car); crushCar(car); }
+            else clearedCars.add(car);
+          }
         }
       }
       if (jumpZ <= 0) land(playerSeg);
@@ -2666,8 +2672,9 @@ canvas{display:block;width:100%;height:100%}
       const dz = wrapDz(c.z - pz);
       if (state === 'play' && c.prevDz !== undefined && c.prevDz > 0 && dz <= 0) {
         const lat = Math.abs(c.offset - playerX);
-        if (jumpZ < 250 && lat < touch * 0.85) {
-          if (V.plow) { knockCar(c); speed *= 0.9; shake = 0.35; addPoints(300, 'Plowed'); applyDamage(0.05); }
+        if (canCrush() && lat < touch * 0.85) crushCar(c);
+        else if (jumpZ < 250 && lat < touch * 0.85) {
+          if (V.plow) { questEvent('tankplow', 1); knockCar(c); speed *= 0.9; shake = 0.35; addPoints(300, 'Plowed'); applyDamage(0.05); }
           else {
             knockCar(c); speed = maxSpeed * 0.05; shake = 0.7; endDrift(false); stuntCrash(); addHeat(0.3); applyDamage(0.3);
             showToast('Head-on crash!');
@@ -3044,6 +3051,7 @@ canvas{display:block;width:100%;height:100%}
       const q = quests[i], t = QUESTS[q.qi];
       if (t.key !== key) continue;
       q.progress = t.kind === 'max' ? Math.max(q.progress, val) : q.progress + val;
+      if (t.key === 'drift' || t.key === 'air') q.progress = Math.round(q.progress * 10) / 10; // judged at the 0.1s the panel shows
       if (q.progress >= q.target) {
         const reward = t.reward(q.target);
         coins += reward; questsDone++; runMissionCoins += reward; runMissions++;
