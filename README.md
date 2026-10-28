@@ -54,3 +54,13 @@ Progress, records and coins are saved in the browser's local storage.
 | Pause / mute | P or Esc / M |
 
 On touch screens, on-screen buttons appear automatically. Best cash and jobs done are saved in local storage.
+
+# Texas Hold'em
+
+`games/texas-holdem/` is a no-limit Texas Hold'em sit-and-go tournament in a single HTML file.
+
+- Play heads-up, 4-handed or 6-handed against AI players. Everyone starts with 1,500 chips, the blinds go up every 8 hands, and the last player with chips wins.
+- Full rules: dealer button, blinds, minimum raises, all-ins, side pots and split pots. The best five-card hand is highlighted at showdown.
+- Each AI player has its own style (tight or loose, passive or aggressive, how often it bluffs). They decide by simulating run-outs to estimate their chance of winning, then weighing that against the pot odds.
+- Optional "Odds" readout shows your own chance of winning the hand. "Fast" speeds up the other players.
+- Keys: F fold, C or Space check / call, R raise, A all-in, arrow keys to size the raise.
