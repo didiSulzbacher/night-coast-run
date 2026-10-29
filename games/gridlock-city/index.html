@@ -212,7 +212,7 @@ canvas#c{display:block;width:100%;height:100%}
       <p class="rec" id="pauseRec"></p>
       <div class="story" id="storyProg"></div>
       <canvas id="cityMap" aria-label="City map"></canvas>
-      <p class="maplegend"><span style="color:#fff">●</span> You &nbsp;<span style="color:#f6c453">●</span> Phones and jobs &nbsp;<span style="color:#ff4fa3">●</span> Spray shops</p>
+      <p class="maplegend"><span style="color:#fff">●</span> You &nbsp;<span style="color:#9fd0ff">●</span> Phones &nbsp;<span style="color:#f6c453">◆</span> Job target &nbsp;<span style="color:#ff4fa3">●</span><span style="color:#f6c453">●</span><span style="color:#2ec4b6">●</span> Gang phones (grey: closed) &nbsp;<span style="color:#ff4fa3">■</span> Spray shops</p>
       <div style="margin-top:18px">
         <button class="btn" id="resumeBtn">Resume</button>
         <button class="btn alt" id="soundBtn">Sound: on</button>
@@ -289,8 +289,10 @@ function addResp(g, d) {
   if (story && story.broken[g]) { resp[g] = -100; return; }
   resp[g] = clamp(resp[g] + d, -100, 100);
 }
-const hostileGang = g => resp[g] <= -25 || (story && story.broken[g]);
-const gangOpen = g => resp[g] > -10 && !(story && story.broken[g]);
+const hostileGang = g => resp[g] <= -40 || (story && story.broken[g]);
+const gangOpen = g => resp[g] > -50 && !(story && story.broken[g]);
+// How to win a gang back: hurt the gang it hates.
+const winBack = g => `Hurt the ${GANGS[rivalOf(g)].short} to win them back.`;
 function setupTurf() {
   for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
     let best = 0, bd = 1e9;
@@ -1397,7 +1399,7 @@ function spawnCrew(m, g, at, n, boss) {
 }
 function startGangJob(b) {
   const g = b.gang, G = GANGS[g];
-  if (!gangOpen(g)) { b.cool = 6; popup(story && story.broken[g] ? `The ${G.short} are finished` : `The ${G.short} won't talk to you`, 2.2); return; }
+  if (!gangOpen(g)) { b.cool = 6; popup(story && story.broken[g] ? `The ${G.short} are finished` : `The ${G.short} won't talk to you. ${winBack(g)}`, 3.2); return; }
   let r = rivalOf(g);
   if (story && story.broken[r]) r = haterOf(g);
   const R2 = GANGS[r];
@@ -1449,7 +1451,7 @@ function endMission(ok, msg) {
   let gangNote = '';
   if (m.gang !== undefined) {
     if (ok) {
-      addResp(m.gang, m.finale ? 100 : 18); addResp(m.rival, m.finale ? -200 : -12);
+      addResp(m.gang, m.finale ? 100 : 18); addResp(m.rival, m.finale ? -200 : -8);
       gangNote = ` · ${GANGS[m.gang].short} respect up`;
       if (story) {
         story.jobs[m.gang]++;
@@ -1719,6 +1721,7 @@ function update(dt) {
   bustCheck(dt);
   sprayCheck(dt);
   updMission(dt);
+  if (state === 'play') for (let g = 0; g < 3; g++) if (resp[g] < 0 && !(story && story.broken[g])) resp[g] = Math.min(0, resp[g] + dt * .05);
   if (state === 'play' && !player.down) {
     const P = player.car || player, tx = Math.floor(P.x / T), ty = Math.floor(P.y / T);
     if (inb(tx, ty) && map[idx(tx, ty)] !== WATER) {
@@ -1956,7 +1959,7 @@ function render() {
     ctx.fillStyle = gc ? '#15151d' : '#9fd0ff'; ctx.fillRect(px - 5 * s, py - 5 * s, 10 * s, 4 * s);
     if (!mission && b.cool <= 0 && state === 'play' && open) {
       const t = (time * 1.4) % 1;
-      ctx.strokeStyle = gc ? gc : `rgba(246,196,83,${1 - t})`; ctx.globalAlpha = 1 - t; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(b.x, b.y, 12 + t * 30, 0, 6.28); ctx.stroke(); ctx.globalAlpha = 1;
+      ctx.strokeStyle = gc ? gc : '#9fd0ff'; ctx.globalAlpha = 1 - t; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(b.x, b.y, 12 + t * 30, 0, 6.28); ctx.stroke(); ctx.globalAlpha = 1;
     }
   }
   // pickups
@@ -2047,7 +2050,10 @@ function drawMini() {
     if (px < 0 || py < 0 || px > W || py > W) { if (!edge) return; px = clamp(px, r + 2, W - r - 2); py = clamp(py, r + 2, W - r - 2); }
     mctx.fillStyle = c; mctx.beginPath(); mctx.arc(px, py, r, 0, 6.28); mctx.fill();
   };
-  if (!mission) for (const b of booths) if (b.cool <= 0 && (b.gang === undefined || gangOpen(b.gang))) dot(b.x, b.y, 3, b.gang !== undefined ? GANGS[b.gang].color : '#f6c453', false);
+  if (!mission) for (const b of booths) {
+    if (b.gang === undefined) { if (b.cool <= 0) dot(b.x, b.y, 3, '#9fd0ff', false); continue; }
+    dot(b.x, b.y, 3.5, gangOpen(b.gang) && b.cool <= 0 ? GANGS[b.gang].color : '#777', false);
+  }
   for (const v of cars) if (v.chase && !v.gone) dot(v.x, v.y, 2.5, (time * 4 | 0) % 2 ? '#ff3b4f' : '#4f8bff', false);
   const mp = missionPoint();
   if (mp) dot(mp.x, mp.y, 3.5 + Math.sin(time * 6), missionRed() ? '#ff4f6d' : '#f6c453', true);
@@ -2062,10 +2068,14 @@ function drawCityMap() {
   const g = c.getContext('2d'), s = W / (N * T);
   g.imageSmoothingEnabled = false; g.drawImage(mm, 0, 0, W, W);
   const dot = (x, y, rad, col) => { g.fillStyle = col; g.beginPath(); g.arc(x * s, y * s, rad * DPR, 0, 6.28); g.fill(); };
-  for (const sp of sprays) dot(sp.x, sp.y, 3, '#ff4fa3');
-  if (!mission) for (const b of booths) if (b.cool <= 0 && (b.gang === undefined || gangOpen(b.gang))) dot(b.x, b.y, b.gang !== undefined ? 4 : 3, b.gang !== undefined ? GANGS[b.gang].color : '#f6c453');
+  for (const sp of sprays) { const q = 4 * DPR; g.fillStyle = '#ff4fa3'; g.fillRect(sp.x * s - q, sp.y * s - q, q * 2, q * 2); }
+  for (const b of booths) {
+    if (b.gang === undefined) { if (!mission && b.cool <= 0) dot(b.x, b.y, 3, '#9fd0ff'); continue; }
+    dot(b.x, b.y, 5, '#15151d'); dot(b.x, b.y, 4, gangOpen(b.gang) ? GANGS[b.gang].color : '#777');
+  }
   for (const h of hqs) if (h) dot(h.x, h.y, 2, '#fff');
-  const mp = missionPoint(); if (mp) dot(mp.x, mp.y, 4, '#f6c453');
+  const mp = missionPoint();
+  if (mp) { const q = 6 * DPR, x = mp.x * s, y = mp.y * s; g.fillStyle = '#f6c453'; g.strokeStyle = '#15151d'; g.lineWidth = DPR; g.beginPath(); g.moveTo(x, y - q); g.lineTo(x + q, y); g.lineTo(x, y + q); g.lineTo(x - q, y); g.closePath(); g.fill(); g.stroke(); }
   const P = player.car || player;
   dot(P.x, P.y, 5, '#15151d'); dot(P.x, P.y, 3.5, '#fff');
 }
@@ -2234,8 +2244,8 @@ function pause(p) {
       const n = document.createElement('b'); n.textContent = G.name; n.style.color = G.color;
       const r = document.createElement('span'); r.textContent = `respect ${Math.round(resp[g])}`;
       const st = document.createElement('span');
-      st.textContent = !story ? (gangOpen(g) ? 'phones open' : 'phones closed')
-        : story.broken[g] ? 'finished, at war with you' : story.finales[g] ? 'big job done' : story.jobs[g] >= 4 ? 'big job ready' : `${story.jobs[g]} / 4 jobs`;
+      const prog = !story ? '' : story.broken[g] ? 'finished, at war with you' : story.finales[g] ? 'big job done' : story.jobs[g] >= 4 ? 'big job ready' : `${story.jobs[g]} / 4 jobs`;
+      st.textContent = story && story.broken[g] ? prog : gangOpen(g) ? (prog || 'phones open') : `phones closed. ${winBack(g)}`;
       sp.append(n, r, st);
     });
     saveStory();
