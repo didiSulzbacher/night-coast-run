@@ -84,3 +84,13 @@ On touch screens, on-screen buttons appear automatically. Best cash and jobs don
 - Killing enemies in quick succession builds a chain multiplier up to x8, and medals are worth more while it lasts.
 - Easy, Normal and Hard difficulty.
 - Controls: mouse, or drag anywhere on a touch screen (your finger can stay below the ship), or the arrow keys with Shift to move slowly. X, B, Space, right-click or the BOMB button for bombs, P to pause. The high score is saved in the browser.
+
+# Tank Duel
+
+`games/tank-duel/` is a top-down tank battle in a single HTML file.
+
+- Play against 1 to 3 computer tanks, or with 2 players on one keyboard (plus up to 2 computer tanks). Rounds go to the last tank standing, and a match is first to 3, 5 or 7 round wins.
+- Every round gets a new symmetric map: steel walls that shells bounce off, brick walls that break after two hits, and bushes to hide in.
+- Power-ups: rapid fire, triple shot, explosive shells (they blast through brick), shield, speed and repair. Each tank takes three hits.
+- Computer tanks come in Rookie, Veteran and Ace. They find paths through the maze, shoot their way through brick, look for bank shots off steel walls and dodge incoming shells.
+- Controls: player 1 drives with W A S D and fires with Space or F. Player 2 drives with the arrow keys and fires with Enter or /. On touch screens there's a joystick and a fire button. P pauses. On a tall phone screen the arena turns portrait.
