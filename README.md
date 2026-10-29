@@ -96,3 +96,13 @@ On touch screens, on-screen buttons appear automatically. Best cash and jobs don
 - Power-ups: rapid fire, triple shot, explosive shells (they blast through brick), shield, speed and repair. Each tank takes three hits.
 - Computer tanks come in Rookie, Veteran and Ace. They find paths through the maze, shoot their way through brick, look for bank shots off steel walls and dodge incoming shells.
 - Controls: player 1 drives with W A S D and fires with Space or F. Player 2 drives with the arrow keys and fires with Enter or /. On touch screens there's a joystick and a fire button. P pauses. On a tall phone screen the arena turns portrait.
+
+# Turbo Cup
+
+`games/turbo-cup/` is a top-down racer in the style of Micro Machines, in a single HTML file. It uses the same car handling as Gridlock City.
+
+- Four tracks: Harbor Loop, Canyon Run, Snow Ridge (slippery) and Neon Nights. Each race is three laps against five rivals.
+- Championship: race all four tracks for points (10, 8, 6, 5, 4, 3) with standings after every race. Or pick any track for a quick race.
+- Four cars to choose from (Furore GT, Stallion, Zippy, Cosmo) and three rival levels. Rivals brake for corners, swing wide into them, pull out to overtake and recover from crashes.
+- Grass slows you down and tyre walls bounce you back. Cutting across the infield doesn't count as progress.
+- Controls: arrow keys or W A S D, Space to handbrake and drift, P to pause. On touch screens there are on-screen buttons. Lap records and cups won are saved in the browser.
