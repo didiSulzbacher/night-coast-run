@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tank Duel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Barlow+Semi+Condensed:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#fff4e2;--muted:#c9c2d6;--sun:#f6c453;--green:#9bf07a;--bg:#14140f;--edge:rgba(255,244,226,.2)}
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);
+  font-family:"Barlow Semi Condensed","Arial Narrow",system-ui,sans-serif;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none}
+#app{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center}
+canvas{display:block;border-radius:8px}
+.touch-on.playing #app{align-items:flex-start;padding-top:env(safe-area-inset-top,0px)}
+.touch{position:absolute;inset:0;pointer-events:none;display:none;z-index:2}
+.touch-on.playing .touch{display:block}
+#stick{position:absolute;left:22px;bottom:calc(env(safe-area-inset-bottom,0px) + 22px);width:130px;height:130px;border-radius:50%;
+  background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.25);pointer-events:auto;touch-action:none}
+#knob{position:absolute;left:50%;top:50%;width:56px;height:56px;margin:-28px;border-radius:50%;background:rgba(255,255,255,.35)}
+#fireBtn{position:absolute;right:22px;bottom:calc(env(safe-area-inset-bottom,0px) + 40px);width:88px;height:88px;border-radius:50%;
+  background:rgba(255,79,109,.35);border:2px solid rgba(255,79,109,.7);color:#fff;font:700 18px "Barlow Semi Condensed",sans-serif;pointer-events:auto;touch-action:none}
+#pauseBtn{position:absolute;right:14px;top:calc(env(safe-area-inset-top,0px) + 10px);width:40px;height:40px;border-radius:50%;border:2px solid rgba(255,255,255,.3);
+  background:rgba(0,0,0,.35);color:#fff;font:700 15px "Barlow Semi Condensed",sans-serif;display:none;z-index:2;cursor:pointer}
+.playing #pauseBtn{display:block}
+.touch-on #pauseBtn{top:auto;right:auto;left:50%;margin-left:-20px;bottom:calc(env(safe-area-inset-bottom,0px) + 70px)}
+.overlay{position:absolute;inset:0;display:flex;align-items:flex-start;justify-content:center;padding:20px 16px;overflow-y:auto;
+  background:linear-gradient(rgba(20,20,15,.6),rgba(20,20,15,.93));z-index:3}
+.overlay[hidden]{display:none}
+.panel{max-width:560px;width:100%;margin:auto;text-align:center}
+.homelink{display:inline-block;color:var(--muted);font-weight:700;font-size:15px;text-decoration:none;border:1.5px solid var(--edge);border-radius:999px;padding:5px 12px}
+.homelink:hover,.homelink:focus-visible{color:var(--ink);border-color:var(--green)}
+.title{font-family:Bungee,Impact,sans-serif;font-weight:400;font-size:clamp(46px,12vw,84px);line-height:.92;margin:10px 0 0;color:var(--green);text-shadow:0 4px 0 #4f7a2a}
+.lede{font-size:clamp(17px,2.6vw,20px);line-height:1.4;margin:14px auto 16px;max-width:38ch}
+.opt{margin:10px 0}
+.opt h3{margin:0 0 6px;font-size:15px;color:var(--muted);font-weight:700;letter-spacing:.04em}
+.pick{display:flex;gap:6px;justify-content:center;flex-wrap:wrap}
+.pick button{font:inherit;font-weight:700;font-size:16px;color:var(--ink);background:transparent;border:2px solid var(--edge);border-radius:999px;padding:6px 14px;cursor:pointer}
+.pick button[aria-pressed="true"]{border-color:var(--green);color:var(--green)}
+.big{font:inherit;font-weight:700;font-size:20px;color:#14140f;background:var(--green);border:0;border-radius:999px;padding:13px 32px;cursor:pointer;box-shadow:0 5px 0 #4f7a2a;margin:12px 5px 5px}
+.big.alt{background:var(--sun);box-shadow:0 5px 0 #9a6a1c}
+.big:active{transform:translateY(3px)}
+.rec{color:var(--muted);font-size:17px;margin:10px 0 0}
+.rec b{font-family:Bungee,Impact,sans-serif;font-weight:400;color:var(--sun)}
+.keys{color:var(--muted);font-size:15px;margin:14px auto 0;line-height:1.6;max-width:46ch}
+.keys b{color:var(--ink)}
+.legend{display:grid;grid-template-columns:auto 1fr auto 1fr;gap:4px 10px;text-align:left;max-width:420px;margin:12px auto 0;font-size:15px;color:var(--muted)}
+.legend i{font:400 13px/24px Bungee,Impact,sans-serif;font-style:normal;width:24px;height:24px;border-radius:6px;text-align:center;color:#14140f}
+.touch-on .keys{display:none}
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="c"></canvas>
+  <div class="touch"><div id="stick"><div id="knob"></div></div><button id="fireBtn">FIRE</button></div>
+  <button id="pauseBtn" aria-label="Pause">II</button>
+
+  <div class="overlay" id="menu">
+    <div class="panel">
+      <a class="homelink" href="../../">&larr; All games</a>
+      <h1 class="title">Tank Duel</h1>
+      <p class="lede">Shells bounce off steel and smash through brick. Hide in the bushes, bank your shots off the walls, and be the last tank rolling.</p>
+      <div class="opt"><h3>PLAYERS</h3><div class="pick" id="pPlayers"><button data-v="1">1 player</button><button data-v="2">2 players, one keyboard</button></div></div>
+      <div class="opt"><h3>COMPUTER TANKS</h3><div class="pick" id="pBots"><button data-v="0">None</button><button data-v="1">1</button><button data-v="2">2</button><button data-v="3">3</button></div></div>
+      <div class="opt"><h3>COMPUTER SKILL</h3><div class="pick" id="pSkill"><button data-v="0">Rookie</button><button data-v="1">Veteran</button><button data-v="2">Ace</button></div></div>
+      <div class="opt"><h3>FIRST TO</h3><div class="pick" id="pWins"><button data-v="3">3 wins</button><button data-v="5">5 wins</button><button data-v="7">7 wins</button></div></div>
+      <button class="big" id="playBtn">Roll out</button>
+      <p class="rec" id="rec"></p>
+      <p class="keys"><b>Player 1:</b> W A S D to drive, Space or F to fire.<br><b>Player 2:</b> arrow keys to drive, Enter or / to fire.<br>With one player, the arrow keys and Enter work too. <b>P</b> pauses.</p>
+      <div class="legend">
+        <i style="background:#ff8a2a">R</i><span>Rapid fire</span><i style="background:#4ff0e0">3</i><span>Triple shot</span>
+        <i style="background:#ff4f6d">B</i><span>Explosive shells</span><i style="background:#b48cff">S</i><span>Shield</span>
+        <i style="background:#f6c453">»</i><span>Speed</span><i style="background:#9bf07a">+</i><span>Repair</span>
+      </div>
+    </div>
+  </div>
+  <div class="overlay" id="pause" hidden>
+    <div class="panel"><h2 class="title">Paused</h2><button class="big" id="resumeBtn">Resume</button><button class="big alt" id="quitBtn">Quit to menu</button></div>
+  </div>
+  <div class="overlay" id="over" hidden>
+    <div class="panel"><h2 class="title" id="overTitle"></h2><p class="lede" id="overText"></p><button class="big" id="againBtn">Rematch</button><button class="big alt" id="menuBtn">Menu</button></div>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+const $ = id => document.getElementById(id);
+const R = Math.random, rnd = (a, b) => a + R() * (b - a), clamp = (v, a, b) => v < a ? a : v > b ? b : v, pick = a => a[Math.floor(R() * a.length)];
+const TAU = Math.PI * 2;
+const wrapA = a => { while (a > Math.PI) a -= TAU; while (a < -Math.PI) a += TAU; return a; };
+
+const T = 40, HUD = 46;
+const FLOOR = 0, BRICK = 1, STEEL = 2, BUSH = 3;
+let COLS = 21, ROWS = 13, W = COLS * T, H = ROWS * T + HUD;
+let grid = new Uint8Array(COLS * ROWS), brickHp = new Uint8Array(COLS * ROWS);
+
+const COLORS = [
+  { name: 'Green', c: '#9bf07a', d: '#4f7a2a' }, { name: 'Blue', c: '#5aa0ff', d: '#24508f' },
+  { name: 'Red', c: '#ff4f6d', d: '#8f2436' }, { name: 'Yellow', c: '#f6c453', d: '#9a6a1c' },
+];
+const POWERS = {
+  rapid: { l: 'R', c: '#ff8a2a', name: 'Rapid fire' }, triple: { l: '3', c: '#4ff0e0', name: 'Triple shot' },
+  boom: { l: 'B', c: '#ff4f6d', name: 'Explosive shells' }, shield: { l: 'S', c: '#b48cff', name: 'Shield' },
+  speed: { l: '»', c: '#f6c453', name: 'Speed' }, repair: { l: '+', c: '#9bf07a', name: 'Repair' },
+};
+
+// ---------- settings & save
+const SAVE = 'tank-duel-v1';
+let rec = { players: 1, bots: 1, skill: 1, wins: 5, matches: 0, won: 0 };
+try { rec = Object.assign(rec, JSON.parse(localStorage.getItem(SAVE) || '{}')); } catch (e) {}
+function save() { try { localStorage.setItem(SAVE, JSON.stringify(rec)); } catch (e) {} }
+
+// ---------- sound
+let AC = null, noiseBuf = null;
+function audio() {
+  if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
+  try {
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    noiseBuf = AC.createBuffer(1, AC.sampleRate / 2, AC.sampleRate);
+    const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = R() * 2 - 1;
+  } catch (e) {}
+}
+function noise(dur, freq, v) {
+  if (!AC) return;
+  const t = AC.currentTime, s = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain();
+  s.buffer = noiseBuf; f.type = 'lowpass'; f.frequency.value = freq;
+  g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(.001, t + dur);
+  s.connect(f); f.connect(g); g.connect(AC.destination); s.start(t); s.stop(t + dur);
+}
+function tone(f, dur, v = .05, type = 'square', f2 = 0) {
+  if (!AC) return;
+  const t = AC.currentTime, o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, t); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + dur);
+  g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(.001, t + dur);
+  o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t + dur + .02);
+}
+
+// ---------- map
+const idx = (x, y) => y * COLS + x;
+const tileAt = (x, y) => { const tx = Math.floor(x / T), ty = Math.floor((y - HUD) / T); return tx < 0 || ty < 0 || tx >= COLS || ty >= ROWS ? STEEL : grid[idx(tx, ty)]; };
+const solid = t => t === BRICK || t === STEEL;
+function spawnPoints() {
+  return [[1, 1], [COLS - 2, ROWS - 2], [COLS - 2, 1], [1, ROWS - 2]].map(([x, y]) => ({ x: (x + .5) * T, y: (y + .5) * T + HUD, a: Math.atan2(ROWS / 2 - y, COLS / 2 - x) }));
+}
+// Mirror one quadrant both ways so every corner gets the same layout.
+function genMap() {
+  const portrait = innerHeight > innerWidth * 1.1;
+  COLS = portrait ? 13 : 21; ROWS = portrait ? 19 : 13;
+  W = COLS * T; H = ROWS * T + HUD;
+  for (let tries = 0; tries < 40; tries++) {
+    grid = new Uint8Array(COLS * ROWS); brickHp = new Uint8Array(COLS * ROWS);
+    const hx = Math.ceil(COLS / 2), hy = Math.ceil(ROWS / 2);
+    for (let y = 0; y < hy; y++) for (let x = 0; x < hx; x++) {
+      let t = FLOOR;
+      if (x === 0 || y === 0) t = STEEL;
+      else if (x <= 2 && y <= 2) t = FLOOR;
+      else {
+        const r = R();
+        t = r < .09 ? STEEL : r < .34 ? BRICK : r < .44 ? BUSH : FLOOR;
+        if ((x % 4 === 0 && y % 3 === 0) && R() < .5) t = STEEL;
+      }
+      for (const [mx, my] of [[x, y], [COLS - 1 - x, y], [x, ROWS - 1 - y], [COLS - 1 - x, ROWS - 1 - y]]) grid[idx(mx, my)] = t;
+    }
+    for (let i = 0; i < grid.length; i++) if (grid[i] === BRICK) brickHp[i] = 2;
+    // every spawn must reach every other without crossing steel
+    const seen = new Uint8Array(COLS * ROWS), q = [idx(1, 1)]; seen[q[0]] = 1;
+    while (q.length) {
+      const i = q.pop(), x = i % COLS, y = (i / COLS) | 0;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const j = idx(x + dx, y + dy);
+        if (x + dx < 0 || y + dy < 0 || x + dx >= COLS || y + dy >= ROWS || seen[j] || grid[j] === STEEL) continue;
+        seen[j] = 1; q.push(j);
+      }
+    }
+    if (seen[idx(COLS - 2, ROWS - 2)] && seen[idx(COLS - 2, 1)] && seen[idx(1, ROWS - 2)]) {
+      let open = 0; for (let i = 0; i < grid.length; i++) if (seen[i] && grid[i] !== BRICK) open++;
+      if (open > COLS * ROWS * .3) break;
+    }
+  }
+  resize();
+}
+
+// ---------- state
+let state = 'menu', M = null, time = 0, shake = 0;
+const tanks = [], shells = [], parts = [], items = [], marks = [];
+const keys = {}, fireTap = [false, false];
+const stick = { x: 0, y: 0, on: false }, touchFire = { on: false };
+
+function newMatch() {
+  M = { round: 0, target: rec.wins, scores: [], over: false, roles: [] };
+  const n = rec.players + rec.bots;
+  for (let i = 0; i < n; i++) M.roles.push(i < rec.players ? { human: i } : { bot: true });
+  if (n < 2) M.roles.push({ bot: true });
+  M.scores = M.roles.map(() => 0);
+  nextRound();
+}
+function nextRound() {
+  M.round++;
+  genMap();
+  tanks.length = shells.length = parts.length = items.length = marks.length = 0;
+  const sp = spawnPoints();
+  M.roles.forEach((r, i) => tanks.push(makeTank(i, sp[i], r)));
+  M.itemT = 6; M.endT = 0; M.count = 3;
+  state = 'count';
+  document.body.classList.add('playing');
+}
+function makeTank(i, s, role) {
+  return { i, x: s.x, y: s.y, a: s.a, hp: 3, alive: true, cd: 0, fx: {}, shield: 0, boomShots: 0, human: role.human, bot: !!role.bot,
+    col: COLORS[i], vx: 0, vy: 0, tread: 0, ai: { think: 0, path: null, bank: null, bankT: 0, dodge: 0, stuck: 0, lx: s.x, ly: s.y, rev: 0 } };
+}
+
+// ---------- tank movement & collisions
+function collideCircle(o, r) {
+  const tx0 = Math.floor((o.x - r) / T), tx1 = Math.floor((o.x + r) / T), ty0 = Math.floor((o.y - HUD - r) / T), ty1 = Math.floor((o.y - HUD + r) / T);
+  for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
+    const t = tx < 0 || ty < 0 || tx >= COLS || ty >= ROWS ? STEEL : grid[idx(tx, ty)];
+    if (!solid(t)) continue;
+    const qx = clamp(o.x, tx * T, tx * T + T), qy = clamp(o.y, ty * T + HUD, ty * T + T + HUD);
+    const dx = o.x - qx, dy = o.y - qy, d2 = dx * dx + dy * dy;
+    if (d2 < r * r && d2 > 1e-6) { const d = Math.sqrt(d2); o.x += dx / d * (r - d); o.y += dy / d * (r - d); }
+  }
+}
+function drive(t, fwd, turn, dt) {
+  const sp = t.fx.speed > 0 ? 185 : 125;
+  t.a = wrapA(t.a + turn * 3.3 * dt);
+  const v = fwd > 0 ? sp * fwd : sp * .7 * fwd;
+  t.x += Math.cos(t.a) * v * dt; t.y += Math.sin(t.a) * v * dt;
+  collideCircle(t, 15);
+  if (fwd) { t.tread += dt; if (t.tread > .07) { t.tread = 0; marks.push({ x: t.x, y: t.y, a: t.a, life: 6 }); if (marks.length > 400) marks.shift(); } }
+}
+function fire(t) {
+  if (t.cd > 0 || !t.alive) return;
+  const mine = shells.filter(s => s.owner === t).length;
+  if (mine >= (t.fx.rapid > 0 ? 9 : 5)) return;
+  t.cd = t.fx.rapid > 0 ? .14 : .4;
+  const angles = t.fx.triple > 0 ? [-.2, 0, .2] : [0];
+  const boom = t.boomShots > 0; if (boom) t.boomShots--;
+  for (const da of angles) {
+    const a = t.a + da, x = t.x + Math.cos(a) * 24, y = t.y + Math.sin(a) * 24;
+    if (solid(tileAt(x, y))) { if (tileAt(x, y) === BRICK) hitBrick(x, y, boom); continue; }
+    shells.push({ x, y, vx: Math.cos(a) * 330, vy: Math.sin(a) * 330, owner: t, life: 4, bounces: 0, boom, age: 0 });
+  }
+  tone(boom ? 160 : 260, .1, .06, 'sawtooth', 80);
+  for (let k = 0; k < 5; k++) parts.push({ x: t.x + Math.cos(t.a) * 26, y: t.y + Math.sin(t.a) * 26, vx: Math.cos(t.a) * rnd(40, 120) + rnd(-30, 30), vy: Math.sin(t.a) * rnd(40, 120) + rnd(-30, 30), life: .25, c: '#ffd23f', s: 3 });
+}
+function hitBrick(x, y, boom) {
+  const tx = Math.floor(x / T), ty = Math.floor((y - HUD) / T), i = idx(tx, ty);
+  if (boom) { explode(x, y); return; }
+  if (grid[i] !== BRICK) return;
+  brickHp[i]--;
+  noise(.12, 900, .15);
+  for (let k = 0; k < 6; k++) parts.push({ x, y, vx: rnd(-90, 90), vy: rnd(-90, 90), life: .4, c: '#b5603f', s: 4 });
+  if (brickHp[i] <= 0) grid[i] = FLOOR;
+}
+function explode(x, y) {
+  shake = Math.max(shake, 10); noise(.6, 400, .35);
+  for (let k = 0; k < 30; k++) { const a = R() * TAU, s = rnd(40, 260); parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: rnd(.3, .7), c: pick(['#ffd23f', '#ff8a2a', '#ff4f2a', '#555']), s: rnd(3, 6) }); }
+  const tx = Math.floor(x / T), ty = Math.floor((y - HUD) / T);
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    const xx = tx + dx, yy = ty + dy;
+    if (xx > 0 && yy > 0 && xx < COLS - 1 && yy < ROWS - 1 && grid[idx(xx, yy)] === BRICK) grid[idx(xx, yy)] = FLOOR;
+  }
+  for (const t of tanks) if (t.alive && Math.hypot(t.x - x, t.y - y) < 62) damage(t, 1);
+}
+function damage(t, d) {
+  if (!t.alive) return;
+  if (t.shield > 0) { t.shield--; tone(500, .15, .06, 'triangle', 250); return; }
+  t.hp -= d; shake = Math.max(shake, 5);
+  noise(.25, 700, .25);
+  if (t.hp <= 0) {
+    t.alive = false; shake = 14; noise(.9, 300, .45);
+    for (let k = 0; k < 40; k++) { const a = R() * TAU, s = rnd(40, 300); parts.push({ x: t.x, y: t.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: rnd(.4, 1), c: pick([t.col.c, '#ffd23f', '#ff8a2a', '#444']), s: rnd(3, 7) }); }
+  }
+}
+
+// ---------- update
+function update(dt) {
+  time += dt;
+  for (const p of parts) { p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= .94; p.vy *= .94; }
+  for (let i = parts.length - 1; i >= 0; i--) if (parts[i].life <= 0) parts.splice(i, 1);
+  for (const m of marks) m.life -= dt;
+  shake *= Math.exp(-8 * dt);
+  if (state === 'count') { M.count -= dt; if (M.count <= 0) { state = 'play'; tone(880, .2, .07); } return; }
+  if (state !== 'play' && state !== 'roundEnd') return;
+
+  for (const t of tanks) {
+    if (!t.alive) continue;
+    for (const k in t.fx) if (t.fx[k] > 0) t.fx[k] -= dt;
+    if (t.cd > 0) t.cd -= dt;
+    const px = t.x, py = t.y;
+    if (t.bot) botThink(t, dt);
+    else humanControl(t, dt);
+    t.vx = (t.x - px) / dt; t.vy = (t.y - py) / dt;
+  }
+  // tanks push each other apart
+  for (let i = 0; i < tanks.length; i++) for (let j = i + 1; j < tanks.length; j++) {
+    const a = tanks[i], b = tanks[j]; if (!a.alive || !b.alive) continue;
+    const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
+    if (d < 30 && d > .01) { const p = (30 - d) / 2; a.x -= dx / d * p; a.y -= dy / d * p; b.x += dx / d * p; b.y += dy / d * p; }
+  }
+
+  // shells
+  for (const s of shells) {
+    s.age += dt; s.life -= dt;
+    const steps = 3;
+    for (let k = 0; k < steps && s.life > 0; k++) {
+      const ox = s.x, oy = s.y;
+      s.x += s.vx * dt / steps; s.y += s.vy * dt / steps;
+      const t = tileAt(s.x, s.y);
+      if (solid(t)) {
+        if (t === BRICK || s.boom) { hitBrick(s.x, s.y, s.boom); s.life = 0; break; }
+        const hx = solid(tileAt(s.x, oy)), hy = solid(tileAt(ox, s.y));
+        if (hx) s.vx = -s.vx; if (hy) s.vy = -s.vy; if (!hx && !hy) { s.vx = -s.vx; s.vy = -s.vy; }
+        s.x = ox; s.y = oy; s.bounces++;
+        tone(1300, .03, .02, 'triangle');
+        if (s.bounces > 3) { s.life = 0; break; }
+      }
+      for (const tk of tanks) {
+        if (!tk.alive || (tk === s.owner && s.age < .25)) continue;
+        if (Math.hypot(tk.x - s.x, tk.y - s.y) < 17) { if (s.boom) explode(s.x, s.y); else damage(tk, 1); s.life = 0; break; }
+      }
+    }
+    if (s.life <= 0) for (let k = 0; k < 4; k++) parts.push({ x: s.x, y: s.y, vx: rnd(-80, 80), vy: rnd(-80, 80), life: .2, c: '#fff6c8', s: 2 });
+  }
+  // shells cancel each other out when they meet
+  for (let i = 0; i < shells.length; i++) for (let j = i + 1; j < shells.length; j++) {
+    const a = shells[i], b = shells[j];
+    if (a.life > 0 && b.life > 0 && Math.abs(a.x - b.x) < 6 && Math.abs(a.y - b.y) < 6) { a.life = b.life = 0; }
+  }
+  for (let i = shells.length - 1; i >= 0; i--) if (shells[i].life <= 0) shells.splice(i, 1);
+
+  // power-ups
+  M.itemT -= dt;
+  if (M.itemT <= 0 && items.length < 3) {
+    M.itemT = rnd(7, 11);
+    for (let k = 0; k < 40; k++) {
+      const x = 1 + Math.floor(R() * (COLS - 2)), y = 1 + Math.floor(R() * (ROWS - 2));
+      if (grid[idx(x, y)] !== FLOOR) continue;
+      const px = (x + .5) * T, py = (y + .5) * T + HUD;
+      if (tanks.some(t => t.alive && Math.hypot(t.x - px, t.y - py) < 90)) continue;
+      items.push({ x: px, y: py, type: pick(Object.keys(POWERS)) }); break;
+    }
+  }
+  for (const it of items) for (const t of tanks) if (t.alive && Math.hypot(t.x - it.x, t.y - it.y) < 26) { grab(t, it.type); it.gone = true; break; }
+  for (let i = items.length - 1; i >= 0; i--) if (items[i].gone) items.splice(i, 1);
+
+  // round end
+  const alive = tanks.filter(t => t.alive);
+  if (state === 'play' && alive.length <= 1) { state = 'roundEnd'; M.endT = 2.2; M.winner = alive.length ? alive[0].i : -1; }
+  if (state === 'roundEnd') {
+    M.endT -= dt;
+    if (M.endT <= 0) {
+      if (M.winner >= 0) M.scores[M.winner]++;
+      if (M.winner >= 0 && M.scores[M.winner] >= M.target) return matchOver();
+      nextRound();
+    }
+  }
+}
+function grab(t, type) {
+  tone(700, .08, .06); tone(1050, .1, .06);
+  if (type === 'repair') t.hp = Math.min(3, t.hp + 1);
+  else if (type === 'shield') t.shield = 2;
+  else if (type === 'boom') t.boomShots = 4;
+  else t.fx[type] = 9;
+  t.flashName = POWERS[type].name; t.flashT = 1.4;
+}
+function humanControl(t, dt) {
+  const solo = rec.players === 1;
+  const k = t.human === 0
+    ? { f: keys.KeyW || (solo && keys.ArrowUp), b: keys.KeyS || (solo && keys.ArrowDown), l: keys.KeyA || (solo && keys.ArrowLeft), r: keys.KeyD || (solo && keys.ArrowRight), fire: keys.Space || keys.KeyF || (solo && (keys.Enter || keys.Slash)) || touchFire.on }
+    : { f: keys.ArrowUp, b: keys.ArrowDown, l: keys.ArrowLeft, r: keys.ArrowRight, fire: keys.Enter || keys.Slash || keys.ControlRight || keys.NumpadEnter };
+  let fwd = (k.f ? 1 : 0) - (k.b ? 1 : 0), turn = (k.r ? 1 : 0) - (k.l ? 1 : 0);
+  if (t.human === 0 && stick.on) {
+    // touch stick: point where you want to go
+    const m = Math.min(1, Math.hypot(stick.x, stick.y));
+    if (m > .2) {
+      const diff = wrapA(Math.atan2(stick.y, stick.x) - t.a);
+      turn = clamp(diff * 3, -1, 1);
+      fwd = Math.abs(diff) < 1.1 ? m : 0;
+    }
+  }
+  drive(t, fwd, turn, dt);
+  if (k.fire || fireTap[t.human]) { fire(t); fireTap[t.human] = false; }
+}
+
+// ---------- computer tanks
+function los(x0, y0, x1, y1, throughBricks) {
+  const d = Math.hypot(x1 - x0, y1 - y0), n = Math.ceil(d / 12);
+  for (let i = 1; i < n; i++) {
+    const t = tileAt(x0 + (x1 - x0) * i / n, y0 + (y1 - y0) * i / n);
+    if (t === STEEL || (t === BRICK && !throughBricks)) return false;
+  }
+  return true;
+}
+function hidden(t, from) { return tileAt(t.x, t.y) === BUSH && Math.hypot(t.x - from.x, t.y - from.y) > 80; }
+function bfs(from, to, allowBrick) {
+  const sx = Math.floor(from.x / T), sy = Math.floor((from.y - HUD) / T), gx = Math.floor(to.x / T), gy = Math.floor((to.y - HUD) / T);
+  const prev = new Int32Array(COLS * ROWS).fill(-1), start = idx(sx, sy), goal = idx(gx, gy);
+  const q = [start]; prev[start] = start;
+  for (let h = 0; h < q.length; h++) {
+    const i = q[h]; if (i === goal) break;
+    const x = i % COLS, y = (i / COLS) | 0;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx, ny = y + dy; if (nx < 0 || ny < 0 || nx >= COLS || ny >= ROWS) continue;
+      const j = idx(nx, ny), tt = grid[j];
+      if (prev[j] >= 0 || tt === STEEL || (tt === BRICK && !allowBrick)) continue;
+      prev[j] = i; q.push(j);
+    }
+  }
+  if (prev[goal] < 0) return null;
+  const path = []; for (let i = goal; i !== start; i = prev[i]) path.push(i);
+  return path.reverse();
+}
+// Trace a shell from (x, y) at angle a, bouncing off steel; does it reach the target before it hits us?
+function simShot(t, a, tgt) {
+  let x = t.x + Math.cos(a) * 24, y = t.y + Math.sin(a) * 24, vx = Math.cos(a) * 8, vy = Math.sin(a) * 8, b = 0;
+  for (let s = 0; s < 220; s++) {
+    const ox = x, oy = y; x += vx; y += vy;
+    const tt = tileAt(x, y);
+    if (tt === BRICK) return false;
+    if (tt === STEEL) { const hx = solid(tileAt(x, oy)), hy = solid(tileAt(ox, y)); if (hx) vx = -vx; if (hy) vy = -vy; if (!hx && !hy) { vx = -vx; vy = -vy; } x = ox; y = oy; if (++b > 2) return false; }
+    if (Math.hypot(tgt.x - x, tgt.y - y) < 15) return true;
+    if (s > 6 && Math.hypot(t.x - x, t.y - y) < 22) return false;
+  }
+  return false;
+}
+function botThink(t, dt) {
+  const ai = t.ai, skill = rec.skill;
+  const foes = tanks.filter(o => o !== t && o.alive);
+  if (!foes.length) return;
+  let tgt = null, bd = 1e9;
+  for (const o of foes) { const d = Math.hypot(o.x - t.x, o.y - t.y); if (d < bd) { bd = d; tgt = o; } }
+  const seen = !hidden(tgt, t) && los(t.x, t.y, tgt.x, tgt.y);
+
+  // dodge incoming shells
+  if (ai.dodge > 0) ai.dodge -= dt;
+  else if (skill > 0) {
+    for (const s of shells) {
+      if (s.owner === t && s.age < .4) continue;
+      const dx = t.x - s.x, dy = t.y - s.y, sp2 = s.vx * s.vx + s.vy * s.vy, tc = (dx * s.vx + dy * s.vy) / sp2;
+      if (tc < 0 || tc > .7) continue;
+      const cx = s.x + s.vx * tc - t.x, cy = s.y + s.vy * tc - t.y;
+      if (Math.hypot(cx, cy) < 24 && R() < (skill === 2 ? .9 : .5)) { ai.dodge = .45; ai.dodgeA = Math.atan2(s.vy, s.vx) + (R() < .5 ? 1 : -1) * Math.PI / 2; break; }
+    }
+  }
+  ai.think -= dt; ai.bankT -= dt;
+  if (ai.think <= 0) {
+    ai.think = [.6, .35, .2][skill];
+    ai.path = bfs(t, tgt, false) || bfs(t, tgt, true);
+    ai.bank = null;
+    if (!seen && ai.bankT <= 0) {
+      ai.bankT = [2.2, 1, .6][skill];
+      for (let k = 0; k < 48; k++) { const a = k * TAU / 48; if (simShot(t, a, tgt)) { ai.bank = a; break; } }
+    }
+  }
+  let fwd = 0, want = t.a, shoot = false;
+  if (ai.dodge > 0) { want = ai.dodgeA; fwd = 1; }
+  else if (seen) {
+    const lead = Math.hypot(tgt.x - t.x, tgt.y - t.y) / 330 * (skill === 2 ? 1 : .4);
+    want = Math.atan2(tgt.y + tgt.vy * lead - t.y, tgt.x + tgt.vx * lead - t.x);
+    shoot = Math.abs(wrapA(want - t.a)) < [.2, .12, .07][skill];
+    fwd = bd > 260 ? 1 : bd < 120 ? -1 : 0;
+  } else if (ai.bank !== null) { want = ai.bank; shoot = Math.abs(wrapA(want - t.a)) < .05; }
+  else if (ai.path && ai.path.length) {
+    let i = ai.path[0];
+    const cx = (i % COLS + .5) * T, cy = (((i / COLS) | 0) + .5) * T + HUD;
+    if (Math.hypot(cx - t.x, cy - t.y) < 14 && ai.path.length > 1) { ai.path.shift(); i = ai.path[0]; }
+    const nx = (i % COLS + .5) * T, ny = (((i / COLS) | 0) + .5) * T + HUD;
+    want = Math.atan2(ny - t.y, nx - t.x);
+    if (grid[i] === BRICK) { shoot = Math.abs(wrapA(want - t.a)) < .15; fwd = 0; }
+    else fwd = Math.abs(wrapA(want - t.a)) < .5 ? 1 : 0;
+  }
+  // unstick
+  if (fwd && Math.hypot(t.x - ai.lx, t.y - ai.ly) < 20 * dt) { ai.stuck += dt; if (ai.stuck > .6) { ai.rev = .5; ai.stuck = 0; } } else ai.stuck = 0;
+  ai.lx = t.x; ai.ly = t.y;
+  if (ai.rev > 0) { ai.rev -= dt; fwd = -1; }
+  const diff = wrapA(want - t.a);
+  drive(t, fwd, clamp(diff * 4, -1, 1), dt);
+  if (shoot && R() < [.25, .6, 1][skill] * dt * 30) fire(t);
+}
+
+function matchOver() {
+  state = 'over'; document.body.classList.remove('playing');
+  const w = M.winner, wt = tanks[w];
+  rec.matches++;
+  const humanWon = wt && wt.human !== undefined;
+  if (humanWon && rec.players === 1) rec.won++;
+  save();
+  $('overTitle').textContent = wt.human !== undefined ? (rec.players === 1 ? 'Victory!' : `Player ${wt.human + 1} wins!`) : `${COLORS[w].name} tank wins`;
+  $('overText').textContent = 'Final score: ' + M.scores.map((s, i) => `${tankName(i)} ${s}`).join(' · ');
+  $('over').hidden = false;
+}
+const tankName = i => { const r = M.roles[i]; return r.human !== undefined ? (rec.players === 1 ? 'You' : `P${r.human + 1}`) : COLORS[i].name; };
+
+// ---------- rendering
+let scale = 1, DPR = 1;
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  const reserve = document.body.classList.contains('touch-on') ? 170 : 0;
+  scale = Math.min(innerWidth / W, (innerHeight - reserve) / H);
+  cv.style.width = W * scale + 'px'; cv.style.height = H * scale + 'px';
+  cv.width = Math.round(W * scale * DPR); cv.height = Math.round(H * scale * DPR);
+}
+addEventListener('resize', resize);
+function drawTile(t, x, y, i) {
+  const X = x * T, Y = y * T + HUD;
+  if (t === BRICK) {
+    ctx.fillStyle = '#9c4f33'; ctx.fillRect(X, Y, T, T);
+    ctx.fillStyle = '#b5603f';
+    for (let r = 0; r < 4; r++) for (let c = -1; c < 2; c++) {
+      const bx = Math.max(X + c * 20 + (r % 2 ? 10 : 0) + 1, X + 1), ex = Math.min(X + c * 20 + (r % 2 ? 10 : 0) + 19, X + T - 1);
+      if (ex > bx) ctx.fillRect(bx, Y + r * 10 + 1, ex - bx, 8);
+    }
+    if (brickHp[i] < 2) { ctx.strokeStyle = 'rgba(0,0,0,.5)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(X + 8, Y + 4); ctx.lineTo(X + 20, Y + 18); ctx.lineTo(X + 14, Y + 34); ctx.moveTo(X + 20, Y + 18); ctx.lineTo(X + 34, Y + 22); ctx.stroke(); }
+  } else if (t === STEEL) {
+    ctx.fillStyle = '#5d6270'; ctx.fillRect(X, Y, T, T);
+    ctx.fillStyle = '#7b8190'; ctx.fillRect(X + 3, Y + 3, T - 6, T - 6);
+    ctx.fillStyle = '#4a4e5a'; for (const [a, b] of [[8, 8], [32, 8], [8, 32], [32, 32]]) { ctx.beginPath(); ctx.arc(X + a, Y + b, 2.5, 0, TAU); ctx.fill(); }
+  }
+}
+function drawTank(t) {
+  ctx.save(); ctx.translate(t.x, t.y); ctx.rotate(t.a);
+  ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(-15, -13, 32, 30);
+  ctx.fillStyle = '#2a2a2a'; ctx.fillRect(-17, -16, 34, 8); ctx.fillRect(-17, 8, 34, 8);
+  ctx.fillStyle = '#555'; for (let k = -15; k < 17; k += 6) { const o = (time * 40 * 0) % 6; ctx.fillRect(k + o, -15, 2, 6); ctx.fillRect(k + o, 9, 2, 6); }
+  ctx.fillStyle = t.col.d; ctx.fillRect(-14, -10, 28, 20);
+  ctx.fillStyle = t.col.c; ctx.fillRect(-12, -8, 24, 16);
+  ctx.fillStyle = t.col.d; ctx.fillRect(4, -3, 22, 6);
+  ctx.beginPath(); ctx.arc(0, 0, 8, 0, TAU); ctx.fill();
+  ctx.fillStyle = t.col.c; ctx.beginPath(); ctx.arc(0, 0, 5, 0, TAU); ctx.fill();
+  ctx.restore();
+  if (t.shield > 0) { ctx.strokeStyle = `rgba(180,140,255,${.5 + Math.sin(time * 8) * .3})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(t.x, t.y, 24, 0, TAU); ctx.stroke(); }
+  for (let k = 0; k < 3; k++) { ctx.fillStyle = k < t.hp ? t.col.c : 'rgba(255,255,255,.2)'; ctx.fillRect(t.x - 14 + k * 10, t.y - 30, 8, 4); }
+  if (t.flashT > 0) { t.flashT -= 1 / 60; ctx.fillStyle = '#fff4e2'; ctx.font = '700 13px "Barlow Semi Condensed", sans-serif'; ctx.textAlign = 'center'; ctx.fillText(t.flashName, t.x, t.y - 36); }
+}
+function render() {
+  const sx = (R() - .5) * shake, sy = (R() - .5) * shake;
+  ctx.setTransform(scale * DPR, 0, 0, scale * DPR, sx * scale * DPR, sy * scale * DPR);
+  ctx.fillStyle = '#14140f'; ctx.fillRect(-20, -20, W + 40, H + 40);
+  if (!M) return;
+  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) { ctx.fillStyle = (x + y) % 2 ? '#3c3a2c' : '#403e30'; ctx.fillRect(x * T, y * T + HUD, T, T); }
+  ctx.fillStyle = 'rgba(0,0,0,.18)';
+  for (const m of marks) { if (m.life <= 0) continue; ctx.save(); ctx.translate(m.x, m.y); ctx.rotate(m.a); ctx.globalAlpha = Math.min(1, m.life / 3); ctx.fillRect(-2, -15, 4, 6); ctx.fillRect(-2, 9, 4, 6); ctx.restore(); }
+  ctx.globalAlpha = 1;
+  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) { const t = grid[idx(x, y)]; if (t === BRICK || t === STEEL) drawTile(t, x, y, idx(x, y)); }
+  for (const it of items) {
+    const P = POWERS[it.type], b = Math.sin(time * 4 + it.x) * 2;
+    ctx.fillStyle = P.c; ctx.fillRect(it.x - 12, it.y - 12 + b, 24, 24);
+    ctx.fillStyle = '#14140f'; ctx.font = '400 15px Bungee, Impact, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(P.l, it.x, it.y + 1 + b);
+  }
+  for (const t of tanks) if (!t.alive) { ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.beginPath(); ctx.arc(t.x, t.y, 18, 0, TAU); ctx.fill(); }
+  for (const t of tanks) if (t.alive) drawTank(t);
+  for (const s of shells) {
+    ctx.fillStyle = s.boom ? '#ff4f6d' : '#fff6c8'; ctx.beginPath(); ctx.arc(s.x, s.y, s.boom ? 5.5 : 4, 0, TAU); ctx.fill();
+  }
+  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) if (grid[idx(x, y)] === BUSH) {
+    const X = x * T, Y = y * T + HUD;
+    ctx.fillStyle = 'rgba(46,110,40,.94)'; ctx.fillRect(X, Y, T, T);
+    ctx.fillStyle = 'rgba(80,160,60,.9)'; for (const [a, b] of [[10, 10], [28, 12], [14, 28], [30, 30], [20, 20]]) { ctx.beginPath(); ctx.arc(X + a, Y + b, 8, 0, TAU); ctx.fill(); }
+  }
+  for (const p of parts) { ctx.globalAlpha = Math.min(1, p.life * 3); ctx.fillStyle = p.c; ctx.fillRect(p.x - p.s / 2, p.y - p.s / 2, p.s, p.s); }
+  ctx.globalAlpha = 1;
+  // HUD
+  ctx.fillStyle = '#1c1c16'; ctx.fillRect(0, 0, W, HUD);
+  ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.font = '400 16px Bungee, Impact, sans-serif';
+  let x = 12;
+  M.roles.forEach((r, i) => {
+    ctx.fillStyle = COLORS[i].c; ctx.fillRect(x, 15, 16, 16);
+    ctx.fillStyle = '#fff4e2'; const label = `${tankName(i)} ${M.scores[i]}`; ctx.fillText(label, x + 22, 24);
+    x += ctx.measureText(label).width + 44;
+  });
+  ctx.textAlign = 'right'; ctx.fillStyle = '#c9c2d6'; ctx.font = '700 15px "Barlow Semi Condensed", sans-serif';
+  ctx.fillText(`Round ${M.round} · first to ${M.target}`, W - 60, 24);
+  if (state === 'count' || state === 'roundEnd') {
+    ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.fillRect(0, H / 2 - 50, W, 100);
+    ctx.textAlign = 'center'; ctx.font = '400 44px Bungee, Impact, sans-serif';
+    if (state === 'count') { ctx.fillStyle = '#f6c453'; ctx.fillText(Math.ceil(M.count), W / 2, H / 2); }
+    else {
+      const w = M.winner; ctx.fillStyle = w >= 0 ? COLORS[w].c : '#fff4e2';
+      ctx.fillText(w >= 0 ? `${tankName(w)} ${tankName(w) === 'You' ? 'win' : 'wins'} the round` : 'Draw!', W / 2, H / 2);
+    }
+  }
+}
+
+// ---------- input
+addEventListener('keydown', e => {
+  audio(); keys[e.code] = true;
+  // remember taps that start and end between two frames
+  if (!e.repeat) {
+    if (e.code === 'Space' || e.code === 'KeyF') fireTap[0] = true;
+    if (e.code === 'Enter' || e.code === 'Slash' || e.code === 'ControlRight' || e.code === 'NumpadEnter') fireTap[rec.players === 1 ? 0 : 1] = true;
+  }
+  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Slash'].includes(e.code)) e.preventDefault();
+  if ((e.code === 'KeyP' || e.code === 'Escape') && (state === 'play' || state === 'count')) pause();
+  else if ((e.code === 'KeyP' || e.code === 'Escape') && state === 'pause') resume();
+});
+addEventListener('keyup', e => { keys[e.code] = false; });
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; if (state === 'play') pause(); });
+let prevState = 'play';
+function pause() { prevState = state; state = 'pause'; $('pause').hidden = false; }
+function resume() { state = prevState; $('pause').hidden = true; }
+const stickEl = $('stick'), knob = $('knob');
+function stickMove(e) {
+  const r = stickEl.getBoundingClientRect(), dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2), m = r.width / 2;
+  const l = Math.hypot(dx, dy), k = l > m ? m / l : 1;
+  stick.x = dx * k / m; stick.y = dy * k / m; stick.on = true;
+  knob.style.transform = `translate(${dx * k}px,${dy * k}px)`;
+}
+stickEl.addEventListener('pointerdown', e => { audio(); stickEl.setPointerCapture(e.pointerId); stickMove(e); });
+stickEl.addEventListener('pointermove', e => { if (stick.on) stickMove(e); });
+const stickOff = () => { stick.on = false; stick.x = stick.y = 0; knob.style.transform = ''; };
+stickEl.addEventListener('pointerup', stickOff); stickEl.addEventListener('pointercancel', stickOff);
+$('fireBtn').addEventListener('pointerdown', e => { audio(); touchFire.on = true; fireTap[0] = true; e.preventDefault(); });
+for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) $('fireBtn').addEventListener(ev, () => { touchFire.on = false; });
+if (matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window) document.body.classList.add('touch-on');
+
+function setupPick(id, key) {
+  const btns = document.querySelectorAll(`#${id} button`);
+  const sync = () => { for (const b of btns) b.setAttribute('aria-pressed', String(+b.dataset.v === rec[key])); };
+  for (const b of btns) b.addEventListener('click', () => { rec[key] = +b.dataset.v; if (key === 'players' && rec.players === 1 && rec.bots === 0) rec.bots = 1; save(); syncAll(); });
+  return sync;
+}
+const syncs = [setupPick('pPlayers', 'players'), setupPick('pBots', 'bots'), setupPick('pSkill', 'skill'), setupPick('pWins', 'wins')];
+function syncAll() {
+  for (const s of syncs) s();
+  // one player needs at least one opponent
+  document.querySelector('#pBots button[data-v="0"]').disabled = rec.players === 1;
+  document.querySelector('#pBots button[data-v="3"]').disabled = rec.players === 2;
+  if (rec.players === 2 && rec.bots > 2) { rec.bots = 2; for (const s of syncs) s(); }
+}
+function showMenu() {
+  state = 'menu'; M = null; document.body.classList.remove('playing');
+  $('menu').hidden = false; $('over').hidden = true; $('pause').hidden = true;
+  syncAll();
+  const el = $('rec'); el.textContent = '';
+  if (rec.matches) { el.append('Matches won against the computer: '); el.appendChild(Object.assign(document.createElement('b'), { textContent: String(rec.won) })); }
+}
+$('playBtn').addEventListener('click', () => { audio(); $('menu').hidden = true; newMatch(); });
+$('pauseBtn').addEventListener('click', pause);
+$('resumeBtn').addEventListener('click', resume);
+$('quitBtn').addEventListener('click', showMenu);
+$('againBtn').addEventListener('click', () => { $('over').hidden = true; newMatch(); });
+$('menuBtn').addEventListener('click', showMenu);
+
+let last = 0;
+function frame(t) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(.033, (t - last) / 1000 || 0); last = t;
+  if (state !== 'pause' && state !== 'menu' && state !== 'over') update(dt);
+  render();
+}
+genMap();
+showMenu();
+requestAnimationFrame(frame);
+if (location.hash === '#debug') window.TD = { tanks, shells, get M() { return M; }, get state() { return state; }, get grid() { return grid; }, rec, newMatch, damage };
+})();
+</script>
+</body>
+</html>
