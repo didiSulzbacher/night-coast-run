@@ -64,3 +64,13 @@ On touch screens, on-screen buttons appear automatically. Best cash and jobs don
 - Each AI player has its own style (tight or loose, passive or aggressive, how often it bluffs). They decide by simulating run-outs to estimate their chance of winning, then weighing that against the pot odds.
 - Optional "Odds" readout shows your own chance of winning the hand. "Fast" speeds up the other players.
 - Keys: F fold, C or Space check / call, R raise, A all-in, arrow keys to size the raise.
+
+# Neon Breakout
+
+`games/neon-breakout/` is a brick breaker in a single HTML file.
+
+- 15 levels, with a boss fight every fifth level: the Warden, the Hydra and the Overmind. Bosses move, shoot at your paddle (a hit stuns it for a moment) and the Overmind summons new bricks. After level 15 the levels loop, faster.
+- Bricks: plain, tough (2 hits), hard (3 hits), steel (unbreakable), explosive (takes out its neighbours) and power-up bricks.
+- Power-ups: multi-ball, wide paddle, lasers, slow ball, catch, fireball, extra life, and a narrow paddle to avoid. Breaking bricks without touching the paddle builds a combo multiplier up to x5.
+- Level editor: paint your own level, play-test it, and share it as a level code (`NB1:...`) that anyone can load.
+- Controls: mouse, touch or arrow keys to move, click, tap or Space to launch, P to pause. High score and unlocked levels are saved in the browser.
