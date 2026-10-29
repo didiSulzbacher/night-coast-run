@@ -74,3 +74,13 @@ On touch screens, on-screen buttons appear automatically. Best cash and jobs don
 - Power-ups: multi-ball, wide paddle, lasers, slow ball, catch, fireball, extra life, and a narrow paddle to avoid. Breaking bricks without touching the paddle builds a combo multiplier up to x5.
 - Level editor: paint your own level, play-test it, and share it as a level code (`NB1:...`) that anyone can load.
 - Controls: mouse, touch or arrow keys to move, click, tap or Space to launch, P to pause. High score and unlocked levels are saved in the browser.
+
+# Star Swarm
+
+`games/star-swarm/` is a vertical shoot-'em-up in a single HTML file.
+
+- Three sectors of enemy waves (drones, fighters, kamikazes, turrets, spinners and cruiser mini-bosses), each ending in a bullet-hell boss with three phases: the Hive Queen, the Dreadnought and the Core. After sector 3 the game loops, harder.
+- Your guns fire on their own. Power-ups upgrade them to five levels, add up to three homing missiles, give you a shield or an extra bomb. Bombs clear the screen of bullets and turn them into medals.
+- Killing enemies in quick succession builds a chain multiplier up to x8, and medals are worth more while it lasts.
+- Easy, Normal and Hard difficulty.
+- Controls: mouse, or drag anywhere on a touch screen (your finger can stay below the ship), or the arrow keys with Shift to move slowly. X, B, Space, right-click or the BOMB button for bombs, P to pause. The high score is saved in the browser.
