@@ -43,6 +43,8 @@ Progress, records and coins are saved in the browser's local storage.
 - Walk around, carjack any car (7 types with drift handling) and pick up a pistol, machine gun or rocket launcher.
 - Wanted level of 1 to 5 stars. Cops chase and ram you, get out to arrest you, and shoot from 3 stars. Drive onto a pink SPRAY pad to clear your stars and repair the car.
 - Answer ringing phone booths for jobs: courier runs, car orders, hits, taxi fares, getaways and demolition.
+- Three gangs split the city: the Neon Serpents, the Iron Crowns and the Dock Rats. Each has its own turf, members, cars and a respect meter. Hurt a gang and its respect drops (its rival likes that); drop low enough and its members shoot on sight.
+- **Story mode:** gang phones ring in the gang's colour and offer jobs against its rival: wreck a rival car, wipe out a rival crew, steal a rival car for the gang garage, or run a package. After four jobs a gang offers its big job, taking out the rival boss and their bodyguards, which puts that gang out of business. Two big jobs and the city is yours. Progress, cash and weapons are saved. **Free roam** is a fresh city every time.
 
 | Action | Keys |
 |---|---|

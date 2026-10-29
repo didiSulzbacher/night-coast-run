@@ -30,6 +30,18 @@ canvas#c{display:block;width:100%;height:100%}
 .meter i{display:block;height:100%;width:100%;background:#9bc53d;transition:width .2s}
 .meter.low i{background:#ff3b4f}
 .carbox[hidden]{display:none}
+.resp{display:flex;flex-direction:column;gap:3px;margin-top:3px}
+.rrow{display:flex;align-items:center;gap:6px;font-weight:700;font-size:12px;text-shadow:0 1px 2px #000}
+.rbar{position:relative;width:clamp(70px,14vw,120px);height:7px;border-radius:4px;background:rgba(0,0,0,.55);overflow:hidden}
+.rbar i{position:absolute;top:0;bottom:0}
+.rbar::after{content:"";position:absolute;left:50%;top:0;bottom:0;width:1px;background:rgba(255,255,255,.7)}
+.rrow.war span{text-decoration:line-through;opacity:.7}
+.story{display:grid;grid-template-columns:auto auto auto;gap:4px 14px;justify-content:center;margin:12px auto 0;font-size:15px;text-align:left}
+.story b{font-weight:700}
+.story span{color:var(--muted)}
+.gangs{display:grid;gap:8px;text-align:left;max-width:440px;margin:14px auto 0;font-size:16px;line-height:1.4}
+.gangs b{font-family:Bungee,Impact,sans-serif;font-weight:400}
+.btn.green{background:#9bf07a;box-shadow:0 5px 0 #5f7f1f;color:#13240a}
 .carbox .meter i{background:#5aa0d8}
 .carbox .meter.low i{background:#ff8a2a}
 .weapon{font-weight:700;font-size:clamp(15px,2.4vw,18px);text-shadow:0 2px 2px rgba(0,0,0,.7)}
@@ -131,6 +143,7 @@ canvas#c{display:block;width:100%;height:100%}
         <div class="meter" id="carM"><i id="carBar"></i></div>
       </div>
       <div class="weapon" id="weapon"></div>
+      <div class="resp" id="resp"></div>
     </div>
     <div class="tc"><div class="stars" id="stars"><span>★</span><span>★</span><span>★</span><span>★</span><span>★</span></div></div>
     <div class="tr"><div class="cash" id="cash">$0</div><canvas id="mini" width="160" height="160"></canvas></div>
@@ -157,7 +170,9 @@ canvas#c{display:block;width:100%;height:100%}
       <a class="homelink" href="../../">&larr; All games</a>
       <h1 class="title">Gridlock City</h1>
       <p class="lede">Steal any car you like, answer ringing phones for jobs, and stay one step ahead of the cops.</p>
-      <button class="btn" id="playBtn">Hit the streets</button>
+      <button class="btn" id="storyBtn">Story</button>
+      <button class="btn alt" id="playBtn">Free roam</button>
+      <p style="margin:4px 0 0"><button class="btn pink" id="newStoryBtn" hidden style="font-size:15px;padding:8px 18px">Start the story over</button></p>
       <p class="rec" id="rec"></p>
       <div class="keys">
         <b>Arrows / WASD</b><span>Walk, or drive and steer</span>
@@ -167,7 +182,27 @@ canvas#c{display:block;width:100%;height:100%}
         <b>Q or Tab</b><span>Switch weapon</span>
         <b>P or Esc</b><span>Pause &middot; <b>M</b> mute</span>
       </div>
+      <p class="tips"><b>Story:</b> three gangs run the city. Answer their coloured phones, earn respect, and play them against each other. Your progress is saved. <b>Free roam:</b> a fresh city with no strings attached.</p>
       <p class="tips">The arrow points to the nearest ringing phone. Drive into a pink <b>SPRAY</b> pad to lose your wanted stars and fix your car.</p>
+    </div>
+  </div>
+
+  <div class="overlay" id="introScreen" hidden>
+    <div class="card">
+      <h2 class="title">Welcome to Gridlock City</h2>
+      <p class="lede">You arrive with $0 and a pistol. Three gangs split the city between them, and each one hates the next:</p>
+      <div class="gangs" id="gangList"></div>
+      <p class="lede">Answer a gang's phone (it rings in their colour) to work for them. Each job earns respect with that gang and costs you respect with its rival. Drop too low and a gang will shoot on sight. After <b>four jobs</b>, a gang offers you its <b>big job</b>: taking out its rival's boss. Pull off two big jobs and the city is yours.</p>
+      <button class="btn" id="introGo">Hit the streets</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="endScreen" hidden>
+    <div class="card">
+      <h2 class="title">The city is yours</h2>
+      <p class="lede" id="endText"></p>
+      <button class="btn green" id="keepBtn">Keep playing</button>
+      <p style="margin-top:18px"><a class="homelink" href="../../">&larr; All games</a></p>
     </div>
   </div>
 
@@ -175,6 +210,7 @@ canvas#c{display:block;width:100%;height:100%}
     <div class="card">
       <h2 class="title">Paused</h2>
       <p class="rec" id="pauseRec"></p>
+      <div class="story" id="storyProg"></div>
       <canvas id="cityMap" aria-label="City map"></canvas>
       <p class="maplegend"><span style="color:#fff">●</span> You &nbsp;<span style="color:#f6c453">●</span> Phones and jobs &nbsp;<span style="color:#ff4fa3">●</span> Spray shops</p>
       <div style="margin-top:18px">
@@ -229,6 +265,53 @@ const treeX = new Float32Array(N * N), treeY = new Float32Array(N * N), treeR = 
 const treeList = [], buildings = [], booths = [], sprays = [], weaponSpots = [], healthSpots = [], parkedSpots = [];
 let hospital = null, station = null;
 const hubs = [];
+
+// ---------- gangs
+const GANGS = [
+  { name: 'Neon Serpents', short: 'Serpents', color: '#ff4fa3', car: 'sports', boss: 'Viper', hat: '#7a1a52' },
+  { name: 'Iron Crowns', short: 'Crowns', color: '#f6c453', car: 'muscle', boss: 'King Bruno', hat: '#5a4410' },
+  { name: 'Dock Rats', short: 'Rats', color: '#2ec4b6', car: 'van', boss: 'Old Salt', hat: '#0f4f49' },
+];
+// Each gang hates the next one round the ring, and its jobs are aimed at that rival.
+const rivalOf = g => (g + 1) % 3, haterOf = g => (g + 2) % 3;
+const turf = new Int8Array(N * N), hqs = [];
+let resp = [0, 0, 0], story = null, gameMode = 'free', lastTurf = -1;
+const STORY_SAVE = 'gridlock-story-v1';
+function freshStory() { return { resp: [0, 0, 0], jobs: [0, 0, 0], finales: [false, false, false], broken: [false, false, false], cash: 0, ammo: { pistol: 30, smg: 0, rocket: 0 }, done: false }; }
+function loadStory() { try { const s = JSON.parse(localStorage.getItem(STORY_SAVE) || 'null'); return s && s.jobs ? Object.assign(freshStory(), s) : null; } catch (e) { return null; } }
+function saveStory() {
+  if (gameMode !== 'story' || !story) return;
+  story.resp = resp.slice(); story.cash = cash;
+  story.ammo = { pistol: ammo.pistol || 0, smg: ammo.smg || 0, rocket: ammo.rocket || 0 };
+  try { localStorage.setItem(STORY_SAVE, JSON.stringify(story)); } catch (e) {}
+}
+function addResp(g, d) {
+  if (story && story.broken[g]) { resp[g] = -100; return; }
+  resp[g] = clamp(resp[g] + d, -100, 100);
+}
+const hostileGang = g => resp[g] <= -25 || (story && story.broken[g]);
+const gangOpen = g => resp[g] > -10 && !(story && story.broken[g]);
+function setupTurf() {
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    let best = 0, bd = 1e9;
+    hubs.forEach((h, g) => { const d = (x - h.x) ** 2 + (y - h.y) ** 2; if (d < bd) { bd = d; best = g; } });
+    turf[idx(x, y)] = best;
+  }
+  // two phones per gang: the booths in its turf nearest its downtown
+  for (let g = 0; g < 3; g++) {
+    const h = hubs[g];
+    const mine = booths.filter(b => b.gang === undefined && turf[idx(Math.floor(b.x / T), Math.floor(b.y / T))] === g)
+      .sort((a, b) => Math.hypot(a.x / T - h.x, a.y / T - h.y) - Math.hypot(b.x / T - h.x, b.y / T - h.y));
+    mine.slice(0, 2).forEach(b => { b.gang = g; });
+    // the gang garage: the open tile closest to its downtown
+    let hq = null, hd = 1e9;
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const t = map[idx(x, y)];
+      if ((t === PARK || t === PLAZA) && turf[idx(x, y)] === g && !tree[idx(x, y)]) { const d = (x - h.x) ** 2 + (y - h.y) ** 2; if (d < hd) { hd = d; hq = { x: (x + .5) * T, y: (y + .5) * T }; } }
+    }
+    hqs[g] = hq || hospital;
+  }
+}
 
 const PAL = [['#8c7f73', '#a99b8d'], ['#7a4b3f', '#9a6656'], ['#5f6b78', '#7d8998'], ['#a58f62', '#c4ad7d'],
   ['#4d6f6a', '#67918b'], ['#6a5a7a', '#8a789c'], ['#8b8f96', '#b1b5bc'], ['#9b5b45', '#b9775f'], ['#56607a', '#3f4a66']];
@@ -364,6 +447,9 @@ function renderMinimapBase() {
   const C = { [WATER]: '#1d4b80', [ROAD]: '#6a6a76', [SIDE]: '#3c3b46', [BLD]: '#24232c', [GRASS]: '#3f7a37',
     [PARK]: '#34343d', [PLAZA]: '#6d6454', [ALLEY]: '#2e2c35', [SPRAY]: '#ff4fa3' };
   for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) { m.fillStyle = C[map[idx(x, y)]]; m.fillRect(x * 2, y * 2, 2, 2); }
+  m.globalAlpha = .16;
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) if (map[idx(x, y)] !== WATER) { m.fillStyle = GANGS[turf[idx(x, y)]].color; m.fillRect(x * 2, y * 2, 2, 2); }
+  m.globalAlpha = 1;
 }
 
 // ---------- vehicles
@@ -415,6 +501,10 @@ function newPlayer(p) {
     bustT: 0, hurtCD: 0, flash: 0, shirt: '#ff8a2a', hair: '#3a2418', state: 'walk', kind: 'player' };
 }
 
+function makeGangster(p, g, armed) {
+  p.kind = 'gang'; p.gang = g; p.armed = armed; p.shirt = GANGS[g].color; p.hair = GANGS[g].hat; p.spd = rnd(45, 62);
+  return p;
+}
 function makePed(x, y, kind) {
   return { x, y, a: DANG[Math.floor(R() * 4)], vx: 0, vy: 0, state: 'walk', kind, spd: rnd(42, 60), t: rnd(2, 8),
     anim: R() * 6, shirt: kind === 'cop' ? '#22346b' : kind === 'fare' ? '#ff4fa3' : pick(SHIRTS), hair: pick(HAIRS),
@@ -542,6 +632,7 @@ function crime(amount, x, y) {
 function panic(x, y, r) {
   for (const p of peds) {
     if (p.kind === 'cop' || p.state === 'dead' || p.state === 'down' || p.kind === 'fare') continue;
+    if (p.kind === 'gang') { if (p.state !== 'gang' && Math.abs(p.x - x) < r && Math.abs(p.y - y) < r && (p.armed || p.boss) && resp[p.gang] < 10) provoke(p); if (p.state === 'gang' || p.boss || p.mission) continue; }
     if (Math.abs(p.x - x) < r && Math.abs(p.y - y) < r) { p.state = 'flee'; p.fx = x; p.fy = y; p.t = rnd(4, 7); }
   }
 }
@@ -549,19 +640,28 @@ function panic(x, y, r) {
 // ---------- damage
 function killPed(p, vx, vy, byPlayer) {
   if (p.state === 'dead') return;
+  if (p.hp > 1) { p.hp--; p.hitT = .15; splat(p.x, p.y, 4, 'rgba(120,12,18,.4)'); if (byPlayer && p.kind === 'gang') provoke(p); return; }
   p.state = 'dead'; p.vx = vx; p.vy = vy; p.t = 25;
   splat(p.x + rnd(-4, 4), p.y + rnd(-4, 4), rnd(7, 12), 'rgba(120,12,18,.55)');
   panic(p.x, p.y, 280);
   if (byPlayer) {
     crime(p.kind === 'cop' ? 1.5 : .7, p.x, p.y);
     if (p.kind === 'cop' && R() < .5) dropPickup(p.x, p.y, 'pistol');
+    if (p.kind === 'gang') {
+      addResp(p.gang, -7); addResp(haterOf(p.gang), 3);
+      if (p.armed && R() < .35) dropPickup(p.x, p.y, R() < .2 ? 'smg' : 'pistol');
+      for (const q of peds) if (q.kind === 'gang' && q.gang === p.gang && q.state !== 'dead' && Math.hypot(q.x - p.x, q.y - p.y) < 400) provoke(q);
+    }
   }
   noise(.12, 380, 1.2, .25 * vol(p.x, p.y));
 }
 function knockDown(p) {
   if (p.state === 'dead') return;
   p.state = 'down'; p.t = 2.6;
+  if (p.kind === 'gang') { p.aggro = true; addResp(p.gang, -2); }
 }
+// A gang member you've hurt fights back unless the gang really likes you.
+function provoke(p) { if (p.kind === 'gang' && p.state !== 'dead' && resp[p.gang] < 40) { p.aggro = true; if (p.state !== 'down') p.state = 'gang'; } }
 function hurtPlayer(d) {
   if (player.down || player.car) return;
   player.hp -= d; hurtT = .35;
@@ -611,7 +711,9 @@ function ejectDriver(v, bail) {
   if (solidT(tileAt(x, y))) { x = v.x - s * off; y = v.y + c * off; }
   const cop = v.driver === COP;
   const p = makePed(x, y, cop ? 'cop' : 'civ');
+  if (v.gang !== undefined && !cop) { makeGangster(p, v.gang, R() < .6); if (!bail || hostileGang(v.gang)) provoke(p); }
   if (cop && heat >= 1) p.state = 'cop';
+  else if (p.state === 'gang') {}
   else { p.state = 'flee'; p.fx = v.x; p.fy = v.y; p.t = 6; p.a = Math.atan2(y - v.y, x - v.x); }
   peds.push(p);
   v.driver = NONE; v.bailed = bail; v.siren = false; v.chase = false; v.thr = 0; v.steer = 0;
@@ -921,6 +1023,10 @@ function updPed(p, dt) {
   let mv = 0;
   switch (p.state) {
     case 'walk': {
+      if (p.kind === 'gang' && state === 'play' && !player.down && (p.aggro || p.mission || hostileGang(p.gang))) {
+        const P = player.car || player, r = p.mission && !p.aggro ? 260 : 320;
+        if (Math.abs(P.x - p.x) < r && Math.abs(P.y - p.y) < r && los(p.x, p.y, P.x, P.y)) { p.state = 'gang'; if (p.mission) p.aggro = true; break; }
+      }
       p.t -= dt; mv = p.spd;
       const here = tileAt(p.x, p.y);
       if (here === ROAD) p.wasRoad = true;
@@ -940,7 +1046,28 @@ function updPed(p, dt) {
       if (p.t < 0) { p.state = 'walk'; p.t = rnd(2, 6); turnPed(p); }
       break;
     }
-    case 'down': p.t -= dt; if (p.t < 0) { p.state = p.kind === 'cop' && heat >= 1 ? 'cop' : 'flee'; p.fx = player.x; p.fy = player.y; p.t = 5; } break;
+    case 'down': p.t -= dt; if (p.t < 0) { p.state = p.kind === 'cop' && heat >= 1 ? 'cop' : p.kind === 'gang' ? 'gang' : 'flee'; p.fx = player.x; p.fy = player.y; p.t = 5; } break;
+    case 'gang': {
+      if (state !== 'play' || player.down || (!p.aggro && !hostileGang(p.gang))) { p.state = 'walk'; break; }
+      const P = player.car || player, dx = P.x - p.x, dy = P.y - p.y, d = Math.hypot(dx, dy);
+      if (d > 750 && !p.mission) { p.state = 'walk'; p.aggro = false; break; }
+      if (p.mission && !p.aggro && d > 320) { mv = 0; p.a += Math.sin(time + p.x) * dt; break; }
+      p.a = Math.atan2(dy, dx);
+      if (p.armed) {
+        mv = d > 210 ? 150 : 0;
+        p.cd -= dt;
+        if (p.cd <= 0 && d < 380 && los(p.x, p.y, P.x, P.y)) {
+          p.cd = p.boss ? rnd(.35, .6) : rnd(.8, 1.5);
+          fireBullet('gang', p.x, p.y, p.a + rnd(-.16, .16), p.boss ? 8 : 5, false);
+          noise(.1, 1500, .8, .22 * vol(p.x, p.y));
+        }
+      } else {
+        mv = d > 16 ? 160 : 0;
+        p.cd -= dt;
+        if (d < 22 && p.cd <= 0 && !player.car) { p.cd = .8; hurtPlayer(8); noise(.08, 300, 1, .3); }
+      }
+      break;
+    }
     case 'dead': {
       p.t -= dt; p.vx *= Math.exp(-5 * dt); p.vy *= Math.exp(-5 * dt);
       p.x += p.vx * dt; p.y += p.vy * dt;
@@ -1034,7 +1161,7 @@ function updBullets(dt) {
       b.x += b.vx * dt / steps; b.y += b.vy * dt / steps;
       if (solidT(tileAt(b.x, b.y))) { done = true; if (b.rocket) explode(b.x, b.y, b.owner); else sparks(b.x, b.y, 4); break; }
       for (const p of peds) {
-        if (p.state === 'dead' || (b.owner === 'cop' && p.kind === 'cop')) continue;
+        if (p.state === 'dead' || (b.owner === 'cop' && p.kind === 'cop') || (b.owner === 'gang' && p.kind === 'gang')) continue;
         if (Math.abs(p.x - b.x) < 9 && Math.abs(p.y - b.y) < 9) {
           done = true;
           if (b.rocket) explode(b.x, b.y, b.owner); else killPed(p, b.vx * .15, b.vy * .15, b.owner === 'player');
@@ -1042,7 +1169,7 @@ function updBullets(dt) {
         }
       }
       if (done) break;
-      if (b.owner === 'cop' && !player.car && !player.down && Math.abs(player.x - b.x) < 9 && Math.abs(player.y - b.y) < 9) {
+      if (b.owner !== 'player' && !player.car && !player.down && Math.abs(player.x - b.x) < 9 && Math.abs(player.y - b.y) < 9) {
         hurtPlayer(b.dmg); done = true; break;
       }
       for (const v of cars) {
@@ -1114,6 +1241,7 @@ function enterExit() {
   if (!best) return;
   if (best.driver === CIV || best.driver === COP) {
     const cop = best.driver === COP;
+    if (best.gang !== undefined && !cop) addResp(best.gang, -5);
     ejectDriver(best, false);
     crime(cop ? 1.3 : .35, best.x, best.y);
   }
@@ -1177,7 +1305,7 @@ function respawn() {
   for (const v of cars) if (v.chase) { v.chase = false; v.siren = false; v.wpx = null; }
   for (const p of peds) if (p.state === 'cop') p.state = 'walk';
   cam.x = player.x; cam.y = player.y;
-  save();
+  save(); saveStory();
 }
 
 // ---------- missions
@@ -1243,26 +1371,109 @@ function startMission(booth) {
   banner('NEW JOB', m.text, '#f6c453', 3);
   tone(880, 880, .12, .12, 'square'); tone(1175, 1175, .16, .12, 'square', .14);
 }
+function turfPoint(types, g, dmin, dmax) {
+  for (let k = 0; k < 400; k++) {
+    const a = R() * 6.28, d = rnd(dmin, dmax), x = player.x + Math.cos(a) * d, y = player.y + Math.sin(a) * d;
+    const tx = Math.floor(x / T), ty = Math.floor(y / T);
+    if (!inb(tx, ty) || turf[idx(tx, ty)] !== g || tree[idx(tx, ty)] || !types.includes(map[idx(tx, ty)])) continue;
+    return { x: (tx + .5) * T, y: (ty + .5) * T, i: idx(tx, ty) };
+  }
+  // fall back to the gang's downtown
+  for (let k = 0; k < 400; k++) {
+    const tx = Math.floor(hubs[g].x + rnd(-12, 12)), ty = Math.floor(hubs[g].y + rnd(-12, 12));
+    if (inb(tx, ty) && turf[idx(tx, ty)] === g && !tree[idx(tx, ty)] && types.includes(map[idx(tx, ty)])) return { x: (tx + .5) * T, y: (ty + .5) * T, i: idx(tx, ty) };
+  }
+  return null;
+}
+function spawnCrew(m, g, at, n, boss) {
+  m.targets = [];
+  for (let k = 0; k < n; k++) {
+    const p = makeGangster(makePed(at.x + rnd(-50, 50), at.y + rnd(-50, 50), 'civ'), g, true);
+    p.mission = true; p.state = 'walk'; p.spd = 25;
+    if (boss && k === 0) { p.boss = true; p.hp = 7; p.hair = '#ffd23f'; p.spd = 0; m.boss = p; }
+    else p.hp = boss ? 2 : 1;
+    peds.push(p); m.targets.push(p);
+  }
+}
+function startGangJob(b) {
+  const g = b.gang, G = GANGS[g];
+  if (!gangOpen(g)) { b.cool = 6; popup(story && story.broken[g] ? `The ${G.short} are finished` : `The ${G.short} won't talk to you`, 2.2); return; }
+  let r = rivalOf(g);
+  if (story && story.broken[r]) r = haterOf(g);
+  const R2 = GANGS[r];
+  b.cool = 30;
+  const m = { gang: g, rival: r, time: 0, reward: 0, step: 0, target: null, title: G.short, text: '' };
+  const finale = gameMode === 'story' && story.jobs[g] >= 4 && !story.finales[g] && !story.broken[rivalOf(g)];
+  let kind = finale ? 'finale' : pick(['hit', 'squad', 'steal', 'courier']);
+  if (kind === 'hit') {
+    const p = turfPoint([ROAD], r, 700, 1800);
+    if (p && !isInter(p.i % N, Math.floor(p.i / N))) {
+      const v = makeCar(R2.car, p.x, p.y, DANG[lv[p.i] >= 0 ? lv[p.i] : lh[p.i]], CIV);
+      v.gang = r; v.color = R2.color; v.mission = true; v.cruise = 240; cars.push(v);
+      Object.assign(m, { type: 'hit', car: v, time: 180, reward: 2500, text: `Wreck the ${R2.short}' ${v.c.name}.` });
+    } else kind = 'courier';
+  }
+  if (kind === 'squad' || kind === 'finale') {
+    const p = turfPoint([SIDE, PLAZA, ALLEY], r, 900, 2200);
+    if (p) {
+      spawnCrew(m, r, p, kind === 'finale' ? 7 : 4, kind === 'finale');
+      Object.assign(m, { type: 'squad', target: m.targets[0], finale: kind === 'finale', time: kind === 'finale' ? 0 : 240,
+        reward: kind === 'finale' ? 10000 : 3000,
+        title: kind === 'finale' ? `${G.short}: the big job` : G.short,
+        text: kind === 'finale' ? `Take out ${R2.boss}, boss of the ${R2.short}. Expect bodyguards.` : `Wipe out the ${R2.short} crew on their turf.` });
+    } else kind = 'courier';
+  }
+  if (kind === 'steal') {
+    const p = turfPoint([PARK, SIDE], r, 700, 1800);
+    if (p) {
+      const v = makeCar(R2.car, p.x, p.y, R() < .5 ? -Math.PI / 2 : Math.PI / 2, NONE);
+      v.gang = r; v.color = R2.color; v.mission = true; v.parked = true; cars.push(v);
+      Object.assign(m, { type: 'steal', car: v, target: v, drop: hqs[g], reward: 2500, text: `Steal the ${R2.short}' ${v.c.name} and bring it to the ${G.short} garage.` });
+    } else kind = 'courier';
+  }
+  if (kind === 'courier') {
+    const p = turfPoint([SIDE, PLAZA, ALLEY], g, 900, 2400) || hqs[g];
+    const d = Math.hypot(p.x - player.x, p.y - player.y);
+    Object.assign(m, { type: 'courier', target: p, time: Math.round(d / 230 + 18), reward: Math.round((800 + d * .5) / 10) * 10, text: `Run a package across ${G.short} turf.` });
+  }
+  mission = m;
+  banner(m.finale ? 'THE BIG JOB' : 'NEW JOB', m.text, G.color, 3.2);
+  tone(880, 880, .12, .12, 'square'); tone(1175, 1175, .16, .12, 'square', .14);
+}
 function endMission(ok, msg) {
   const m = mission; if (!m) return;
   mission = null;
   if (m.car) m.car.mission = false;
   if (m.fare && m.fare.state === 'wait') { m.fare.state = 'walk'; m.fare.kind = 'civ'; }
+  if (m.targets) for (const p of m.targets) { p.mission = false; p.spd = 50; }
+  let gangNote = '';
+  if (m.gang !== undefined) {
+    if (ok) {
+      addResp(m.gang, m.finale ? 100 : 18); addResp(m.rival, m.finale ? -200 : -12);
+      gangNote = ` · ${GANGS[m.gang].short} respect up`;
+      if (story) {
+        story.jobs[m.gang]++;
+        if (m.finale) { story.finales[m.gang] = true; story.broken[m.rival] = true; resp[m.rival] = -100; gangNote = ` · the ${GANGS[m.rival].short} are finished`; }
+      }
+    } else addResp(m.gang, -6);
+  }
   if (ok) {
     addCash(m.reward); rec.jobs++; save();
-    banner('JOB DONE', '+' + money(m.reward), '#9bf07a');
+    banner(m.finale ? 'BOSS DOWN' : 'JOB DONE', '+' + money(m.reward) + gangNote, '#9bf07a', m.finale ? 4 : 2.6);
+    if (story && m.finale && story.finales.filter(Boolean).length >= 2 && !story.done) { story.done = true; setTimeout(showEnding, 4200); }
     [523, 659, 784, 1047].forEach((f, i) => tone(f, f, .15, .12, 'square', i * .1));
   } else if (msg) {
     banner('JOB FAILED', msg, '#ff4f6d');
     tone(300, 150, .4, .12, 'sawtooth');
   }
+  saveStory();
 }
 function updMission(dt) {
   for (const b of booths) if (b.cool > 0) b.cool -= dt;
   if (state !== 'play' || player.down) return;
   const P = player.car || player;
   if (!mission) {
-    for (const b of booths) if (b.cool <= 0 && Math.abs(P.x - b.x) < 40 && Math.abs(P.y - b.y) < 40) { startMission(b); break; }
+    for (const b of booths) if (b.cool <= 0 && Math.abs(P.x - b.x) < 40 && Math.abs(P.y - b.y) < 40) { if (b.gang !== undefined) startGangJob(b); else startMission(b); break; }
     return;
   }
   const m = mission;
@@ -1304,6 +1515,30 @@ function updMission(dt) {
       }
       break;
     case 'getaway': if (heat < 1) endMission(true); break;
+    case 'squad': {
+      const alive = m.targets.filter(p => p.state !== 'dead' && !p.gone);
+      if (m.boss) {
+        if (m.boss.state === 'dead') { endMission(true); break; }
+        m.target = m.boss; m.hint = alive.length > 1 ? `${alive.length - 1} bodyguard${alive.length > 2 ? 's' : ''} left` : 'No bodyguards left';
+      } else {
+        if (!alive.length) { endMission(true); break; }
+        m.target = alive[0]; m.hint = `${alive.length} left`;
+      }
+      break;
+    }
+    case 'steal':
+      if (m.car.wreck || m.car.burning || m.car.gone) { endMission(false, 'The car got wrecked.'); break; }
+      if (m.step === 0) {
+        m.target = m.car; m.hint = 'Steal the marked car.';
+        if (player.car === m.car) { m.step = 1; m.target = m.drop; m.time = 150; m.hint = ''; popup(`Take it to the ${GANGS[m.gang].short} garage`, 2.2); }
+      } else if (player.car !== m.car) m.hint = 'Get back in the car.';
+      else if (near(m.drop, 80) && slow(70)) {
+        const v = m.car; enterExit();
+        if (!player.car) { v.gone = true; v.mission = false; }
+        addResp(m.rival, -6);
+        endMission(true);
+      }
+      break;
     case 'wreck': m.hint = `${m.count} / ${m.need} wrecked`; if (m.count >= m.need) endMission(true); break;
   }
 }
@@ -1312,6 +1547,7 @@ function missionPoint() {
   if (m.type === 'hit') return m.car;
   return m.target;
 }
+const missionRed = () => mission && (mission.type === 'hit' || mission.type === 'squad' || (mission.type === 'steal' && mission.step === 0));
 
 // ---------- spawning
 const focus = () => state === 'play' ? (player.car || player) : cam;
@@ -1325,9 +1561,12 @@ function spawnTraffic(rMin, rMax) {
     if (map[i] !== ROAD || isInter(tx, ty)) continue;
     const x = (tx + .5) * T, y = (ty + .5) * T;
     if (cars.some(o => !o.gone && Math.abs(o.x - x) < 90 && Math.abs(o.y - y) < 90)) continue;
-    const dir = lv[i] >= 0 ? lv[i] : lh[i], type = weighted(TRAFFIC_W);
+    const dir = lv[i] >= 0 ? lv[i] : lh[i];
+    let type = weighted(TRAFFIC_W), gang;
+    if (type !== 'police' && R() < .18) { gang = turf[i]; type = GANGS[gang].car; }
     const v = makeCar(type, x, y, DANG[dir], type === 'police' ? COP : CIV);
     if (type === 'police') v.cops = 1;
+    if (gang !== undefined) { v.gang = gang; v.color = GANGS[gang].color; }
     v.vx = Math.cos(v.a) * v.cruise * .7; v.vy = Math.sin(v.a) * v.cruise * .7;
     cars.push(v); return v;
   }
@@ -1341,6 +1580,8 @@ function spawnPed(rMin, rMax) {
     const i = idx(tx, ty), t = map[i];
     if (tree[i] || !(t === SIDE || t === PLAZA || t === GRASS || t === ALLEY)) continue;
     const p = makePed((tx + .2 + R() * .6) * T, (ty + .2 + R() * .6) * T, 'civ');
+    const g = turf[i];
+    if (R() < (story && story.broken[g] ? .12 : .26)) makeGangster(p, g, R() < .55);
     peds.push(p); turnPed(p); return p;
   }
   return null;
@@ -1368,7 +1609,7 @@ function populate(dt) {
   const F = focus(), vr = viewR(), far = vr + 900;
   let nt = 0, np = 0;
   for (const v of cars) if ((v.driver === CIV || (v.driver === COP && !v.chase)) && Math.abs(v.x - F.x) < far && Math.abs(v.y - F.y) < far) nt++;
-  for (const p of peds) if (p.state !== 'dead' && p.kind === 'civ') np++;
+  for (const p of peds) if (p.state !== 'dead' && (p.kind === 'civ' || (p.kind === 'gang' && !p.mission))) np++;
   if (nt < TRAFFIC) spawnTraffic(vr + 60, vr + 600);
   if (np < PEDS) spawnPed(vr + 40, vr + 500);
 
@@ -1377,7 +1618,7 @@ function populate(dt) {
     cullT = .5;
     const keep = o => Math.abs(o.x - F.x) < far && Math.abs(o.y - F.y) < far;
     for (const v of cars) if (!v.gone && !keep(v) && v !== player.car && !v.mission && !(v.parked && !v.wreck)) v.gone = true;
-    for (const p of peds) if (!p.gone && !keep(p) && !(mission && p === mission.fare)) p.gone = true;
+    for (const p of peds) if (!p.gone && !keep(p) && !p.mission && !(mission && p === mission.fare)) p.gone = true;
     for (let i = cars.length - 1; i >= 0; i--) if (cars[i].gone) cars.splice(i, 1);
     for (let i = peds.length - 1; i >= 0; i--) if (peds[i].gone) peds.splice(i, 1);
   }
@@ -1478,6 +1719,13 @@ function update(dt) {
   bustCheck(dt);
   sprayCheck(dt);
   updMission(dt);
+  if (state === 'play' && !player.down) {
+    const P = player.car || player, tx = Math.floor(P.x / T), ty = Math.floor(P.y / T);
+    if (inb(tx, ty) && map[idx(tx, ty)] !== WATER) {
+      const g = turf[idx(tx, ty)];
+      if (g !== lastTurf) { if (lastTurf >= 0) popup(`${GANGS[g].name} turf${hostileGang(g) ? ' (hostile)' : ''}`, 2); lastTurf = g; }
+    }
+  }
   populate(dt);
   for (const q of parts) { q.life -= dt; q.x += q.vx * dt; q.y += q.vy * dt; const k = Math.exp(-q.drag * dt); q.vx *= k; q.vy *= k; }
   for (let i = parts.length - 1; i >= 0; i--) if (parts[i].life <= 0) parts.splice(i, 1);
@@ -1587,6 +1835,7 @@ function drawCar(v) {
       ctx.fillStyle = glass; ctx.fillRect(hl - L * .36, -hw + 3, L * .15, W - 6); ctx.fillRect(-hl + L * .12, -hw + 3.5, L * .12, W - 7);
       ctx.fillStyle = 'rgba(255,255,255,.14)'; ctx.fillRect(-hl + L * .24, -hw + 3, L * .4, W - 6);
     }
+    if (v.gang !== undefined) { ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.fillRect(-hl + 3, -1.5, L - 6, 3); }
     if (v.type === 'taxi') { ctx.fillStyle = '#222'; ctx.fillRect(-4, -5, 8, 10); ctx.fillStyle = '#ffe680'; ctx.fillRect(-2, -3, 4, 6); }
     if (v.type === 'sports' || v.type === 'muscle') { ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(-hl + 2, -2.5, L - 4, 2); ctx.fillRect(-hl + 2, 1.5, L - 4, 2); }
     if (v.type === 'police') {
@@ -1616,9 +1865,12 @@ function drawPed(p) {
   ctx.fillStyle = p.shirt; ctx.beginPath(); ctx.ellipse(0, 0, 5.5, 8.5, 0, 0, 6.28); ctx.fill();
   if (p.kind === 'player' && player.w > 0) { ctx.fillStyle = '#1a1a1a'; ctx.fillRect(3, 2, player.w === 3 ? 14 : 10, player.w === 3 ? 4 : 2.5); }
   if (p.kind === 'cop' && p.state === 'cop' && stars() >= 3) { ctx.fillStyle = '#1a1a1a'; ctx.fillRect(3, 2, 9, 2.5); }
+  if (p.kind === 'gang' && p.armed && p.state === 'gang') { ctx.fillStyle = '#1a1a1a'; ctx.fillRect(3, 2, p.boss ? 13 : 9, p.boss ? 3.5 : 2.5); }
+  if (p.hitT > 0) { p.hitT -= 1 / 60; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.ellipse(0, 0, 6, 9, 0, 0, 6.28); ctx.fill(); }
   if (p.kind === 'fare') { ctx.fillStyle = p.shirt; ctx.fillRect(0, -11, 3, 6 + Math.sin(p.anim * 3) * 2); }
   ctx.fillStyle = p.kind === 'cop' ? '#16224a' : p.hair; ctx.beginPath(); ctx.arc(.5, 0, 4.3, 0, 6.28); ctx.fill();
   if (p.kind === 'cop') { ctx.fillStyle = '#ffd23f'; ctx.fillRect(2, -1, 2, 2); }
+  if (p.boss) { ctx.fillStyle = '#ffd23f'; for (const k of [-3, 0, 3]) ctx.fillRect(-1 + k * .4, k - 1, 2.4, 2.4); }
   ctx.restore();
   if (p.kind === 'player' && player.flash > 0 && player.w > 0) {
     ctx.fillStyle = '#ffe680'; ctx.beginPath(); ctx.arc(p.x + Math.cos(p.a) * 18, p.y + Math.sin(p.a) * 18, 5, 0, 6.28); ctx.fill();
@@ -1699,11 +1951,12 @@ function render() {
     if (!vis(b.x, b.y, 40)) continue;
     const s = 1 / (1 - 34 / CAMH), px = cam.x + (b.x - cam.x) * s, py = cam.y + (b.y - cam.y) * s;
     ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(b.x - 6, b.y - 6, 16, 16);
-    ctx.fillStyle = '#1f4f9a'; ctx.fillRect(px - 8 * s, py - 8 * s, 16 * s, 16 * s);
-    ctx.fillStyle = '#9fd0ff'; ctx.fillRect(px - 5 * s, py - 5 * s, 10 * s, 4 * s);
-    if (!mission && b.cool <= 0 && state === 'play') {
+    const gc = b.gang !== undefined ? GANGS[b.gang].color : null, open = b.gang === undefined || gangOpen(b.gang);
+    ctx.fillStyle = gc ? (open ? gc : '#555') : '#1f4f9a'; ctx.fillRect(px - 8 * s, py - 8 * s, 16 * s, 16 * s);
+    ctx.fillStyle = gc ? '#15151d' : '#9fd0ff'; ctx.fillRect(px - 5 * s, py - 5 * s, 10 * s, 4 * s);
+    if (!mission && b.cool <= 0 && state === 'play' && open) {
       const t = (time * 1.4) % 1;
-      ctx.strokeStyle = `rgba(246,196,83,${1 - t})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(b.x, b.y, 12 + t * 30, 0, 6.28); ctx.stroke();
+      ctx.strokeStyle = gc ? gc : `rgba(246,196,83,${1 - t})`; ctx.globalAlpha = 1 - t; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(b.x, b.y, 12 + t * 30, 0, 6.28); ctx.stroke(); ctx.globalAlpha = 1;
     }
   }
   // pickups
@@ -1719,7 +1972,10 @@ function render() {
   }
   // mission ground markers
   const mp = missionPoint();
-  if (mp && mission.type !== 'hit') beam(mp.x, mp.y, '#f6c453');
+  if (mp && mission.type !== 'hit' && mission.type !== 'squad') beam(mp.x, mp.y, mission.gang !== undefined ? GANGS[mission.gang].color : '#f6c453');
+  if (mission && mission.type === 'squad') for (const p of mission.targets) if (p.state !== 'dead' && vis(p.x, p.y, 30)) {
+    ctx.strokeStyle = p.boss ? '#ffd23f' : '#ff4f6d'; ctx.lineWidth = p.boss ? 3 : 2; ctx.beginPath(); ctx.arc(p.x, p.y, p.boss ? 20 : 14, 0, 6.28); ctx.stroke();
+  }
 
   // entities
   for (const p of peds) if (p.state === 'dead' && vis(p.x, p.y, 20)) drawPed(p);
@@ -1759,8 +2015,8 @@ function render() {
     let tgt = mp, col = '#f6c453';
     if (!mission) {
       let bd = 1e9; tgt = null; col = 'rgba(255,255,255,.75)';
-      for (const b of booths) if (b.cool <= 0) { const dd = Math.hypot(b.x - player.x, b.y - player.y); if (dd < bd) { bd = dd; tgt = b; } }
-    } else if (mission.type === 'hit') col = '#ff4f6d';
+      for (const b of booths) if (b.cool <= 0 && (b.gang === undefined || gangOpen(b.gang))) { const dd = Math.hypot(b.x - player.x, b.y - player.y); if (dd < bd) { bd = dd; tgt = b; } }
+    } else if (missionRed()) col = '#ff4f6d';
     if (tgt && Math.hypot(tgt.x - player.x, tgt.y - player.y) > 110) {
       const px = (player.x - cam.x) * zoom + SW / 2, py = (player.y - cam.y) * zoom + SH / 2;
       const a = Math.atan2(tgt.y - player.y, tgt.x - player.x), r = 54;
@@ -1791,10 +2047,10 @@ function drawMini() {
     if (px < 0 || py < 0 || px > W || py > W) { if (!edge) return; px = clamp(px, r + 2, W - r - 2); py = clamp(py, r + 2, W - r - 2); }
     mctx.fillStyle = c; mctx.beginPath(); mctx.arc(px, py, r, 0, 6.28); mctx.fill();
   };
-  if (!mission) for (const b of booths) if (b.cool <= 0) dot(b.x, b.y, 3, '#f6c453', false);
+  if (!mission) for (const b of booths) if (b.cool <= 0 && (b.gang === undefined || gangOpen(b.gang))) dot(b.x, b.y, 3, b.gang !== undefined ? GANGS[b.gang].color : '#f6c453', false);
   for (const v of cars) if (v.chase && !v.gone) dot(v.x, v.y, 2.5, (time * 4 | 0) % 2 ? '#ff3b4f' : '#4f8bff', false);
   const mp = missionPoint();
-  if (mp) dot(mp.x, mp.y, 3.5 + Math.sin(time * 6), mission.type === 'hit' ? '#ff4f6d' : '#f6c453', true);
+  if (mp) dot(mp.x, mp.y, 3.5 + Math.sin(time * 6), missionRed() ? '#ff4f6d' : '#f6c453', true);
   const a = player.car ? player.car.a : player.a;
   mctx.save(); mctx.translate(W / 2, W / 2); mctx.rotate(a);
   mctx.fillStyle = '#fff'; mctx.beginPath(); mctx.moveTo(6, 0); mctx.lineTo(-4, -4); mctx.lineTo(-4, 4); mctx.closePath(); mctx.fill();
@@ -1807,7 +2063,8 @@ function drawCityMap() {
   g.imageSmoothingEnabled = false; g.drawImage(mm, 0, 0, W, W);
   const dot = (x, y, rad, col) => { g.fillStyle = col; g.beginPath(); g.arc(x * s, y * s, rad * DPR, 0, 6.28); g.fill(); };
   for (const sp of sprays) dot(sp.x, sp.y, 3, '#ff4fa3');
-  if (!mission) for (const b of booths) if (b.cool <= 0) dot(b.x, b.y, 3, '#f6c453');
+  if (!mission) for (const b of booths) if (b.cool <= 0 && (b.gang === undefined || gangOpen(b.gang))) dot(b.x, b.y, b.gang !== undefined ? 4 : 3, b.gang !== undefined ? GANGS[b.gang].color : '#f6c453');
+  for (const h of hqs) if (h) dot(h.x, h.y, 2, '#fff');
   const mp = missionPoint(); if (mp) dot(mp.x, mp.y, 4, '#f6c453');
   const P = player.car || player;
   dot(P.x, P.y, 5, '#15151d'); dot(P.x, P.y, 3.5, '#fff');
@@ -1826,7 +2083,7 @@ function hud(dt) {
   const w = WEAP[player.w], v = player.car, s = stars(), chase = cars.some(c => c.chase);
   const m = mission;
   const mt = m ? `${m.title}|${m.text}|${m.hint || ''}|${Math.ceil(m.time)}` : '';
-  const key2 = [Math.round(dispCash), Math.round(player.hp), w.id, ammo[w.id], v ? Math.round(v.hp) : -1, v ? v.type : '', s, chase, mt].join(',');
+  const key2 = [Math.round(dispCash), Math.round(player.hp), w.id, ammo[w.id], v ? Math.round(v.hp) : -1, v ? v.type : '', s, chase, mt, resp.map(Math.round).join('/'), story ? story.broken.join('') : ''].join(',');
   if (key2 === lastHud) return;
   lastHud = key2;
   $('cash').textContent = money(dispCash);
@@ -1844,8 +2101,19 @@ function hud(dt) {
   const st = $('stars');
   [...st.children].forEach((e, i) => e.classList.toggle('on', i < s));
   st.classList.toggle('chase', chase && s > 0);
+  const rp = $('resp'); rp.textContent = '';
+  GANGS.forEach((G, g) => {
+    const row = document.createElement('div'); row.className = 'rrow' + (story && story.broken[g] ? ' war' : '');
+    const bar = document.createElement('div'); bar.className = 'rbar';
+    const i = document.createElement('i'), r = resp[g];
+    i.style.background = G.color; i.style.left = (r < 0 ? 50 + r / 2 : 50) + '%'; i.style.width = Math.abs(r) / 2 + '%';
+    bar.appendChild(i);
+    const name = document.createElement('span'); name.textContent = G.short; name.style.color = G.color;
+    row.append(bar, name); rp.appendChild(row);
+  });
   const el = $('mission');
   el.hidden = !m;
+  el.style.borderLeftColor = m && m.gang !== undefined ? GANGS[m.gang].color : '';
   if (m) {
     el.textContent = '';
     const t = document.createElement('b'); t.textContent = m.title; el.appendChild(t);
@@ -1876,7 +2144,7 @@ addEventListener('keydown', e => {
     else if (e.code === 'KeyM') setMuted(!muted);
   } else if (state === 'paused') {
     if (e.code === 'KeyP' || e.code === 'Escape') pause(false);
-  } else if (state === 'menu' && e.code === 'Enter') startGame();
+  } else if (state === 'menu' && e.code === 'Enter' && !$('startScreen').hidden) $('storyBtn').click();
 });
 addEventListener('keyup', e => { K[e.code] = false; });
 addEventListener('blur', () => { for (const k in K) K[k] = false; for (const k in touch) touch[k] = false; });
@@ -1897,9 +2165,16 @@ if (matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window) documen
 function resetGame() {
   for (const a of [cars, peds, bullets, parts, skids, splats]) a.length = 0;
   for (const s of parkedSpots) s.car = null;
-  mission = null; heat = 0; seenT = 0; cash = 0; dispCash = 0; lastHud = '';
+  mission = null; heat = 0; seenT = 0; cash = 0; dispCash = 0; lastHud = ''; lastTurf = -1;
   player = newPlayer(hospital); player.a = Math.PI / 2;
   ammo = { fists: Infinity, pistol: 30, smg: 0, rocket: 0 };
+  resp = [0, 0, 0];
+  if (gameMode === 'story') {
+    resp = story.resp.slice(); cash = dispCash = story.cash;
+    ammo = { fists: Infinity, pistol: story.ammo.pistol, smg: story.ammo.smg, rocket: story.ammo.rocket };
+    if (!ammo.pistol && !ammo.smg && !ammo.rocket) ammo.pistol = 12;
+    player.w = ammo.rocket ? 3 : ammo.smg ? 2 : ammo.pistol ? 1 : 0;
+  }
   for (const b of booths) b.cool = 0;
   spawnPickups();
   for (const s of parkedSpots) spawnParked(s);
@@ -1909,36 +2184,89 @@ function prefill() {
   for (let k = 0; k < 140; k++) { if (cars.filter(v => v.driver === CIV).length < TRAFFIC) spawnTraffic(120, vr + 600); }
   for (let k = 0; k < 90 && peds.length < PEDS; k++) spawnPed(30, vr + 500);
 }
-function startGame() {
+function startGame(modeName) {
   initAudio();
+  gameMode = modeName === 'story' ? 'story' : 'free';
+  if (gameMode === 'story') story = loadStory() || freshStory(); else story = null;
+  $('introScreen').hidden = true; $('endScreen').hidden = true;
   resetGame();
   state = 'play';
   cam.x = player.x; cam.y = player.y; zoom = Math.min(SW, SH) / 720;
   prefill();
   $('startScreen').hidden = true; $('hud').hidden = false;
   document.body.classList.add('playing');
-  banner('GRIDLOCK CITY', 'Find a ringing phone for work', '#f6c453', 3);
+  if (gameMode === 'story') { saveStory(); banner('STORY', storyLine(), '#f6c453', 3.4); }
+  else banner('GRIDLOCK CITY', 'Find a ringing phone for work', '#f6c453', 3);
+}
+function storyLine() {
+  if (story.done) return 'The city is yours. Keep playing as long as you like.';
+  const ready = GANGS.findIndex((G, g) => story.jobs[g] >= 4 && !story.finales[g] && gangOpen(g) && !story.broken[rivalOf(g)]);
+  if (ready >= 0) return `The ${GANGS[ready].short} have a big job for you.`;
+  return 'Answer a gang phone to earn their respect.';
+}
+function showEnding() {
+  if (state !== 'play') return;
+  state = 'paused';
+  const left = GANGS.filter((G, g) => !story.broken[g]).map(G => G.name).join(' and the ');
+  const gone = GANGS.filter((G, g) => story.broken[g]).map(G => G.boss).join(' and ');
+  $('endText').textContent = `${gone} are gone, the ${left} take their orders from you, and nobody in Gridlock City moves without your say-so. Cash in your pocket: ${money(cash)}. Jobs done: ${story.jobs.reduce((a, b) => a + b, 0)}.`;
+  $('endScreen').hidden = false;
+  saveStory();
+}
+function showIntro() {
+  const list = $('gangList'); list.textContent = '';
+  GANGS.forEach((G, g) => {
+    const row = document.createElement('div');
+    const n = document.createElement('b'); n.textContent = G.name; n.style.color = G.color;
+    row.append(n, ` run by ${G.boss}. They drive ${CARS[G.car].name}s and hate the `);
+    const r = document.createElement('b'); r.textContent = GANGS[rivalOf(g)].short; r.style.color = GANGS[rivalOf(g)].color;
+    row.append(r, '.');
+    list.appendChild(row);
+  });
+  $('startScreen').hidden = true; $('introScreen').hidden = false;
 }
 function pause(p) {
   if (p && state === 'play') {
     state = 'paused'; $('pauseScreen').hidden = false;
     $('pauseRec').textContent = `Cash ${money(cash)} · Best ${money(rec.best)} · Jobs done ${rec.jobs}`;
+    const sp = $('storyProg'); sp.textContent = '';
+    GANGS.forEach((G, g) => {
+      const n = document.createElement('b'); n.textContent = G.name; n.style.color = G.color;
+      const r = document.createElement('span'); r.textContent = `respect ${Math.round(resp[g])}`;
+      const st = document.createElement('span');
+      st.textContent = !story ? (gangOpen(g) ? 'phones open' : 'phones closed')
+        : story.broken[g] ? 'finished, at war with you' : story.finales[g] ? 'big job done' : story.jobs[g] >= 4 ? 'big job ready' : `${story.jobs[g]} / 4 jobs`;
+      sp.append(n, r, st);
+    });
+    saveStory();
     drawCityMap();
+    $('restartBtn').textContent = gameMode === 'story' ? 'Back to last save' : 'New game';
     for (const k in touch) touch[k] = false;
     save();
   } else if (!p && state === 'paused') { state = 'play'; $('pauseScreen').hidden = true; }
 }
 function showRecord() {
+  const sv = loadStory();
+  $('storyBtn').textContent = sv ? (sv.done ? 'Story (finished)' : 'Continue story') : 'Story';
+  $('newStoryBtn').hidden = !sv;
   $('rec').innerHTML = '';
   if (!rec.best && !rec.jobs) return;
   const add = (label, val) => { $('rec').appendChild(document.createTextNode(label + ' ')); const b = document.createElement('b'); b.textContent = val; $('rec').appendChild(b); };
   add('Most cash', money(rec.best)); $('rec').appendChild(document.createTextNode(' · ')); add('Jobs done', String(rec.jobs));
 }
-$('playBtn').addEventListener('click', startGame);
+$('playBtn').addEventListener('click', () => startGame('free'));
+$('storyBtn').addEventListener('click', () => { if (loadStory()) startGame('story'); else showIntro(); });
+$('introGo').addEventListener('click', () => startGame('story'));
+$('newStoryBtn').addEventListener('click', () => {
+  if (!confirm('Start the story over? Your saved progress will be lost.')) return;
+  try { localStorage.removeItem(STORY_SAVE); } catch (e) {}
+  showIntro();
+});
+$('keepBtn').addEventListener('click', () => { $('endScreen').hidden = true; state = 'play'; });
 $('resumeBtn').addEventListener('click', () => pause(false));
 $('pauseBtn').addEventListener('click', () => pause(true));
 $('soundBtn').addEventListener('click', () => { initAudio(); setMuted(!muted); });
-$('restartBtn').addEventListener('click', () => { $('pauseScreen').hidden = true; startGame(); });
+$('restartBtn').addEventListener('click', () => { $('pauseScreen').hidden = true; startGame(gameMode); });
 document.addEventListener('visibilitychange', () => { if (document.hidden) pause(true); });
 
 function resize() {
@@ -1966,6 +2294,7 @@ function frame(t) {
 }
 
 genCity();
+setupTurf();
 renderMinimapBase();
 resize();
 setMuted(muted);
@@ -1978,7 +2307,8 @@ for (let k = 0; k < 140; k++) spawnTraffic(100, viewR() + 500);
 for (let k = 0; k < 90 && peds.length < PEDS; k++) spawnPed(30, viewR() + 400);
 // Test hook: open the page with #debug to poke at the game from the console.
 if (location.hash === '#debug') window.GC = { get player() { return player; }, get mission() { return mission; }, get heat() { return heat; },
-  get cash() { return cash; }, cars, peds, booths, enterExit, startMission, explode, setHeat: h => { heat = h; } };
+  get cash() { return cash; }, cars, peds, booths, enterExit, startMission, explode, setHeat: h => { heat = h; },
+  GANGS, get resp() { return resp; }, get story() { return story; }, startGangJob, hqs, turf, startGame, updMissionNow: () => updMission(0) };
 requestAnimationFrame(frame);
 })();
 </script>
