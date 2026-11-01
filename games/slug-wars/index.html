@@ -611,6 +611,8 @@ function clearLine(x0, y0, x1, y1) {
 }
 function aiTurn(dt) {
   const ai = G.ai, s = G.active, team = s.team;
+  // every enemy is already gone (drowned or popped): end the turn so the game can finish
+  if (!G.teams.some(t => t !== team && t.slugs.some(o => o.alive))) { G.phase = 'fired'; G.retreat = 0; G.charging = false; return; }
   if (ai.t > 0) { ai.t -= dt; return; }
   if (!ai.plan) {
     ai.plan = aiPlan();
