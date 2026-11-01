@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Slug Wars</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Barlow+Semi+Condensed:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#fff4e2;--muted:#c9c2d6;--sun:#f6c453;--slime:#b6e35a;--bg:#15151d;--panel:rgba(18,17,28,.86);--edge:rgba(255,244,226,.2)}
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);
+  font-family:"Barlow Semi Condensed","Arial Narrow",system-ui,sans-serif;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none}
+#wrap{position:relative;width:100%;height:100%;overflow:hidden}
+canvas#c{display:block;width:100%;height:100%}
+.top{position:absolute;left:0;right:0;top:0;display:none;justify-content:space-between;align-items:flex-start;gap:10px;padding:max(10px,env(safe-area-inset-top)) 12px 0;pointer-events:none}
+.playing .top{display:flex}
+.teams{display:flex;flex-direction:column;gap:4px}
+.tm{display:flex;align-items:center;gap:6px;font-weight:700;font-size:14px;text-shadow:0 1px 2px #000}
+.tm .bar{width:clamp(70px,14vw,140px);height:9px;border-radius:5px;background:rgba(0,0,0,.45);overflow:hidden}
+.tm .bar i{display:block;height:100%;transition:width .4s}
+.tm.now span{text-decoration:underline}
+.mid{text-align:center}
+.turn{font-weight:700;font-size:clamp(15px,2.6vw,19px);text-shadow:0 2px 2px rgba(0,0,0,.7)}
+.timer{font-family:Bungee,Impact,sans-serif;font-size:clamp(26px,5vw,38px);line-height:1;text-shadow:0 3px 0 rgba(0,0,0,.5)}
+.timer.low{color:#ff4f6d}
+.wind{display:flex;flex-direction:column;align-items:flex-end;gap:3px;font-weight:700;font-size:13px;text-shadow:0 1px 2px #000}
+.wbar{position:relative;width:clamp(90px,16vw,150px);height:12px;border-radius:6px;background:rgba(0,0,0,.45);overflow:hidden}
+.wbar i{position:absolute;top:0;bottom:0;background:#9fd0ff}
+.wbar::after{content:"";position:absolute;left:50%;top:0;bottom:0;width:2px;background:#fff}
+.weapons{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 10px);display:none;gap:5px;
+  background:var(--panel);border:1.5px solid var(--edge);border-radius:14px;padding:5px;max-width:calc(100% - 20px);overflow-x:auto}
+.playing .weapons{display:flex}
+.wp{font:inherit;font-weight:700;font-size:13px;color:var(--ink);background:transparent;border:2px solid transparent;border-radius:10px;padding:4px 7px;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;min-width:54px;line-height:1.1}
+.wp i{font-style:normal;font-size:20px}
+.wp small{color:var(--muted);font-size:11px}
+.wp[aria-pressed="true"]{border-color:var(--sun);background:rgba(246,196,83,.12)}
+.wp:disabled{opacity:.3;cursor:default}
+.touch-on .weapons{bottom:calc(env(safe-area-inset-bottom,0px) + 150px);padding:3px;gap:2px}
+.touch-on .wp{font-size:0;min-width:40px;padding:3px 4px}
+.touch-on .wp i{font-size:20px}
+.touch-on .wp small{font-size:10px}
+@media (max-width:560px){ .tm{font-size:12px} .tm .bar{width:60px} .turn{font-size:14px;max-width:46vw} .wind{font-size:11px} .wbar{width:80px} }
+.touch{position:absolute;left:0;right:0;bottom:0;height:0;display:none}
+.touch-on.playing .touch{display:block}
+.tb{position:absolute;width:62px;height:62px;border-radius:50%;background:rgba(255,255,255,.14);border:2px solid rgba(255,255,255,.3);color:#fff;
+  font:700 20px/1 "Barlow Semi Condensed",sans-serif;display:flex;align-items:center;justify-content:center;touch-action:none}
+.tb.sm{font-size:14px}
+.tb.on{background:rgba(246,196,83,.55)}
+#tL{left:12px;bottom:calc(env(safe-area-inset-bottom,0px) + 16px)}
+#tR{left:84px;bottom:calc(env(safe-area-inset-bottom,0px) + 16px)}
+#tJ{left:48px;bottom:calc(env(safe-area-inset-bottom,0px) + 84px)}
+#tUp{right:96px;bottom:calc(env(safe-area-inset-bottom,0px) + 84px)}
+#tDn{right:96px;bottom:calc(env(safe-area-inset-bottom,0px) + 16px)}
+#tF{right:12px;bottom:calc(env(safe-area-inset-bottom,0px) + 40px);width:76px;height:76px;background:rgba(255,79,109,.4)}
+.banner{position:absolute;left:0;right:0;top:28%;text-align:center;font-family:Bungee,Impact,sans-serif;font-size:clamp(34px,8vw,72px);pointer-events:none;
+  opacity:0;transition:opacity .25s;text-shadow:0 4px 0 rgba(0,0,0,.5)}
+.banner.on{opacity:1}
+.banner small{display:block;font-family:"Barlow Semi Condensed",sans-serif;font-weight:700;font-size:clamp(16px,3vw,22px);color:var(--ink)}
+.hint{position:absolute;left:50%;transform:translateX(-50%);top:calc(max(10px,env(safe-area-inset-top)) + 70px);font-weight:700;font-size:15px;
+  background:var(--panel);border:1px solid var(--edge);border-radius:999px;padding:4px 14px;pointer-events:none;display:none;white-space:nowrap}
+.hint.on{display:block}
+#pauseBtn{position:absolute;right:12px;top:calc(max(10px,env(safe-area-inset-top)) + 56px);width:38px;height:38px;border-radius:50%;border:1.5px solid var(--edge);
+  background:rgba(0,0,0,.35);color:var(--ink);font:700 15px "Barlow Semi Condensed",sans-serif;display:none;cursor:pointer}
+.playing #pauseBtn{display:block}
+
+.overlay{position:absolute;inset:0;display:flex;align-items:flex-start;justify-content:center;padding:20px 16px;overflow-y:auto;
+  background:linear-gradient(rgba(15,14,24,.5),rgba(15,14,24,.9));z-index:3}
+.overlay[hidden]{display:none}
+.card{max-width:600px;width:100%;margin:auto;text-align:center}
+.homelink{display:inline-block;color:var(--muted);font-weight:700;font-size:15px;text-decoration:none;border:1.5px solid var(--edge);border-radius:999px;padding:5px 12px}
+.homelink:hover,.homelink:focus-visible{color:var(--ink);border-color:var(--slime)}
+.title{font-family:Bungee,Impact,sans-serif;font-weight:400;font-size:clamp(46px,12vw,84px);line-height:.92;margin:10px 0 0;color:var(--slime);text-shadow:0 4px 0 #5a7a1f}
+.lede{font-size:clamp(17px,2.6vw,20px);line-height:1.4;margin:14px auto 14px;max-width:38ch}
+.opt{margin:10px 0}
+.opt h3{margin:0 0 6px;font-size:15px;color:var(--muted);font-weight:700;letter-spacing:.04em}
+.pick{display:flex;gap:6px;justify-content:center;flex-wrap:wrap}
+.pick button{font:inherit;font-weight:700;font-size:16px;color:var(--ink);background:transparent;border:2px solid var(--edge);border-radius:999px;padding:6px 14px;cursor:pointer}
+.pick button[aria-pressed="true"]{border-color:var(--slime);color:var(--slime)}
+.pick button:disabled{opacity:.3}
+.big{font:inherit;font-weight:700;font-size:20px;color:#1c2a08;background:var(--slime);border:0;border-radius:999px;padding:13px 32px;cursor:pointer;box-shadow:0 5px 0 #5a7a1f;margin:12px 5px 4px}
+.big.alt{background:var(--sun);box-shadow:0 5px 0 #9a6a1c;color:#2a0f1e}
+.big:active{transform:translateY(3px)}
+.rec{color:var(--muted);font-size:16px;margin:10px 0 0}
+.rec b{color:var(--ink)}
+.keys{color:var(--muted);font-size:15px;margin:14px auto 0;line-height:1.6;max-width:50ch}
+.keys b{color:var(--ink)}
+.touch-on .keys{display:none}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="c"></canvas>
+  <div class="top">
+    <div class="teams" id="teams"></div>
+    <div class="mid"><div class="turn" id="turn"></div><div class="timer" id="timer"></div></div>
+    <div class="wind"><span>WIND</span><div class="wbar"><i id="windBar"></i></div></div>
+  </div>
+  <div class="hint" id="hint"></div>
+  <div class="banner" id="banner"></div>
+  <button id="pauseBtn" aria-label="Pause">II</button>
+  <div class="weapons" id="weapons"></div>
+  <div class="touch">
+    <div class="tb" id="tL" data-k="left">◀</div><div class="tb" id="tR" data-k="right">▶</div><div class="tb sm" id="tJ" data-k="jump">JUMP</div>
+    <div class="tb" id="tUp" data-k="up">▲</div><div class="tb" id="tDn" data-k="down">▼</div><div class="tb sm" id="tF" data-k="fire">FIRE</div>
+  </div>
+
+  <div class="overlay" id="menu">
+    <div class="card">
+      <a class="homelink" href="../../">&larr; All games</a>
+      <h1 class="title">Slug Wars</h1>
+      <p class="lede">Teams of slugs take turns blasting each other off a crumbling island. Mind the wind, use the terrain, and knock them into the sea.</p>
+      <div class="opt"><h3>MODE</h3><div class="pick" id="pMode"><button data-v="0">You vs computer</button><button data-v="1">Pass and play</button></div></div>
+      <div class="opt"><h3 id="teamsLabel">COMPUTER TEAMS</h3><div class="pick" id="pTeams"><button data-v="1">1</button><button data-v="2">2</button><button data-v="3">3</button></div></div>
+      <div class="opt"><h3>SLUGS PER TEAM</h3><div class="pick" id="pSlugs"><button data-v="2">2</button><button data-v="3">3</button><button data-v="4">4</button></div></div>
+      <div class="opt" id="skillOpt"><h3>COMPUTER AIM</h3><div class="pick" id="pSkill"><button data-v="0">Wobbly</button><button data-v="1">Decent</button><button data-v="2">Deadly</button></div></div>
+      <button class="big" id="playBtn">Start the war</button>
+      <p class="rec" id="rec"></p>
+      <p class="keys"><b>&larr; &rarr;</b> crawl &middot; <b>&uarr; &darr;</b> aim &middot; <b>Enter</b> jump &middot; hold <b>Space</b> to power up, release to fire &middot; <b>1–8</b> or <b>Q</b> pick a weapon &middot; air strike and teleport: click or move the cursor with the arrows, then Space &middot; drag to look around &middot; <b>P</b> pause</p>
+    </div>
+  </div>
+  <div class="overlay" id="pause" hidden>
+    <div class="card"><h2 class="title">Paused</h2><button class="big" id="resumeBtn">Resume</button><button class="big alt" id="quitBtn">Quit to menu</button></div>
+  </div>
+  <div class="overlay" id="over" hidden>
+    <div class="card"><h2 class="title" id="overTitle"></h2><p class="lede" id="overText"></p><button class="big" id="againBtn">Rematch</button><button class="big alt" id="menuBtn">Menu</button></div>
+  </div>
+  <div class="overlay" id="handoff" hidden>
+    <div class="card"><h2 class="title" id="handTitle"></h2><p class="lede">Pass the device, then tap when you're ready.</p><button class="big" id="handBtn">Ready</button></div>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+const $ = id => document.getElementById(id);
+const R = Math.random, rnd = (a, b) => a + R() * (b - a), clamp = (v, a, b) => v < a ? a : v > b ? b : v, pick = a => a[Math.floor(R() * a.length)];
+const TAU = Math.PI * 2;
+
+// ---------- world
+const W = 2400, H = 1100, GRAV = 620, WIND = 160;
+const mask = new Uint8Array(W * H);
+const land = document.createElement('canvas'); land.width = W; land.height = H;
+const lctx = land.getContext('2d');
+// darker dirt behind the ground, so caves and craters look dug out instead of see-through
+const back = document.createElement('canvas'); back.width = W; back.height = H;
+let waterY = H - 70;
+const solid = (x, y) => { x |= 0; y |= 0; if (x < 0 || x >= W || y < 0) return false; if (y >= H) return true; return mask[y * W + x] === 1; };
+
+function genTerrain() {
+  mask.fill(0);
+  const p = [rnd(0, 6.3), rnd(0, 6.3), rnd(0, 6.3), rnd(0, 6.3)];
+  const top = new Float32Array(W);
+  for (let x = 0; x < W; x++) {
+    let h = H * .56 + Math.sin(x * .0035 + p[0]) * 110 + Math.sin(x * .0105 + p[1]) * 50 + Math.sin(x * .027 + p[2]) * 16 + Math.sin(x * .0016 + p[3]) * 60;
+    const f = Math.min(1, x / 240, (W - x) / 240), e = f * f * (3 - 2 * f);
+    top[x] = h * e + (H + 30) * (1 - e);
+  }
+  for (let x = 0; x < W; x++) for (let y = Math.max(0, top[x] | 0); y < H; y++) mask[y * W + x] = 1;
+  const bctx = back.getContext('2d'); bctx.clearRect(0, 0, W, H);
+  bctx.fillStyle = '#4a3322'; bctx.beginPath(); bctx.moveTo(0, H);
+  for (let x = 0; x < W; x += 4) bctx.lineTo(x, top[x] + 14);
+  bctx.lineTo(W, H); bctx.fill();
+  // caves under the surface
+  for (let k = 0; k < 7; k++) {
+    const cx = rnd(300, W - 300), cy = top[cx | 0] + rnd(90, 220), rx = rnd(60, 140), ry = rnd(30, 60);
+    ellipse(cx, cy, rx, ry, 0);
+  }
+  // a couple of floating islands
+  for (let k = 0; k < 2; k++) {
+    const cx = rnd(500, W - 500), cy = top[cx | 0] - rnd(230, 320), rx = rnd(110, 170), ry = rnd(28, 45);
+    if (cy > 140) ellipse(cx, cy, rx, ry, 1);
+  }
+  paintLand();
+}
+function ellipse(cx, cy, rx, ry, v) {
+  for (let y = Math.max(0, cy - ry | 0); y < Math.min(H, cy + ry); y++) for (let x = Math.max(0, cx - rx | 0); x < Math.min(W, cx + rx); x++) {
+    const dx = (x - cx) / rx, dy = (y - cy) / ry;
+    if (dx * dx + dy * dy < 1 + Math.sin(x * .05) * .08) mask[y * W + x] = v;
+  }
+}
+function paintLand() {
+  const img = lctx.createImageData(W, H), d = img.data;
+  for (let x = 0; x < W; x++) {
+    let depth = 0;
+    for (let y = 0; y < H; y++) {
+      const i = y * W + x;
+      if (!mask[i]) { depth = 0; continue; }
+      depth++;
+      const n = ((x * 73856093 ^ y * 19349663) >>> 0) % 23, j = i * 4;
+      if (depth <= 9) { d[j] = 92 + n; d[j + 1] = 170 + n; d[j + 2] = 58; }
+      else if (depth <= 12) { d[j] = 70; d[j + 1] = 110 + n; d[j + 2] = 44; }
+      else { const s = ((x >> 3) + (y >> 3)) % 2 ? 6 : 0; d[j] = 122 + n + s; d[j + 1] = 84 + n * .6 + s; d[j + 2] = 54 + s; }
+      d[j + 3] = 255;
+    }
+  }
+  lctx.putImageData(img, 0, 0);
+}
+function carve(cx, cy, r) {
+  const r2 = r * r;
+  for (let y = Math.max(0, cy - r | 0); y <= Math.min(H - 1, cy + r); y++) for (let x = Math.max(0, cx - r | 0); x <= Math.min(W - 1, cx + r); x++) {
+    const dx = x - cx, dy = y - cy; if (dx * dx + dy * dy <= r2) mask[y * W + x] = 0;
+  }
+  lctx.globalCompositeOperation = 'destination-out';
+  lctx.beginPath(); lctx.arc(cx, cy, r, 0, TAU); lctx.fill();
+  lctx.globalCompositeOperation = 'source-atop';
+  lctx.strokeStyle = 'rgba(45,28,16,.75)'; lctx.lineWidth = 7; lctx.beginPath(); lctx.arc(cx, cy, r + 3, 0, TAU); lctx.stroke();
+  lctx.globalCompositeOperation = 'source-over';
+}
+function normalAt(x, y) {
+  let nx = 0, ny = 0;
+  for (let dy = -5; dy <= 5; dy++) for (let dx = -5; dx <= 5; dx++) if (dx * dx + dy * dy <= 25 && solid(x + dx, y + dy)) { nx -= dx; ny -= dy; }
+  const l = Math.hypot(nx, ny) || 1; return [nx / l, ny / l];
+}
+
+// ---------- teams, slugs, weapons
+const TEAM_DEF = [
+  { name: 'Garden Gang', color: '#ff4f6d' }, { name: 'Mud Crew', color: '#4f8bff' },
+  { name: 'Leaf Lords', color: '#9bf07a' }, { name: 'Slime Squad', color: '#f6c453' },
+];
+const NAMES = ['Slimy Steve', 'Gloria', 'Ooze', 'Shellby', 'Sir Squish', 'Goo-Goo', 'Mossy', 'Trail Blazer', 'Drip', 'Big Slurp', 'Velvet', 'Snailor', 'Pudding', 'Gristle', 'Lettuce', 'Bubbles'];
+const WEAPONS = [
+  { id: 'bazooka', name: 'Bazooka', icon: '🚀', ammo: Infinity, charge: true },
+  { id: 'grenade', name: 'Grenade', icon: '💣', ammo: Infinity, charge: true },
+  { id: 'cluster', name: 'Cluster', icon: '🎆', ammo: 3, charge: true },
+  { id: 'shotgun', name: 'Shotgun', icon: '🔫', ammo: Infinity },
+  { id: 'bat', name: 'Bat', icon: '🏏', ammo: Infinity },
+  { id: 'dynamite', name: 'Dynamite', icon: '🧨', ammo: 2 },
+  { id: 'air', name: 'Air strike', icon: '✈️', ammo: 1, target: true },
+  { id: 'teleport', name: 'Teleport', icon: '🌀', ammo: 2, target: true },
+];
+const WD = Object.fromEntries(WEAPONS.map(w => [w.id, w]));
+
+// ---------- save & settings
+const SAVE = 'slug-wars-v1';
+let rec = { mode: 0, teams: 1, slugs: 3, skill: 1, wins: 0, games: 0 };
+try { rec = Object.assign(rec, JSON.parse(localStorage.getItem(SAVE) || '{}')); } catch (e) {}
+function save() { try { localStorage.setItem(SAVE, JSON.stringify(rec)); } catch (e) {} }
+
+// ---------- sound
+let AC = null, noiseBuf = null;
+function audio() {
+  if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
+  try {
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    noiseBuf = AC.createBuffer(1, AC.sampleRate, AC.sampleRate);
+    const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = R() * 2 - 1;
+  } catch (e) {}
+}
+function noise(dur, freq, v, type = 'lowpass') {
+  if (!AC) return;
+  const t = AC.currentTime, s = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain();
+  s.buffer = noiseBuf; f.type = type; f.frequency.value = freq; g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(.001, t + dur);
+  s.connect(f); f.connect(g); g.connect(AC.destination); s.start(t); s.stop(t + dur);
+}
+function tone(f, dur, v = .06, type = 'square', f2) {
+  if (!AC) return;
+  const t = AC.currentTime, o = AC.createOscillator(), g = AC.createGain(); o.type = type;
+  o.frequency.setValueAtTime(f, t); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + dur);
+  g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(.001, t + dur); o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t + dur + .02);
+}
+
+// ---------- game state
+let G = null, state = 'menu', time = 0, shake = 0;
+const projs = [], parts = [], floats = [], crates = [], graves = [];
+const cam = { x: W / 2, y: H / 2, free: 0 };
+let zoom = 1, SW = 0, SH = 0, DPR = 1;
+const keys = {}, touch = {};
+
+function newGame() {
+  genTerrain();
+  waterY = H - 70;
+  for (const a of [projs, parts, floats, crates, graves]) a.length = 0;
+  const human = rec.mode === 0 ? [true] : [];
+  const nTeams = rec.mode === 0 ? 1 + rec.teams : 1 + rec.teams;
+  const names = NAMES.slice().sort(() => R() - .5);
+  G = { teams: [], turn: -1, turnNo: 0, wind: 0, phase: 'between', timer: 0, retreat: 0, settleT: 0, power: 0, charging: false, shots: 0, cursor: null, active: null, over: false };
+  for (let t = 0; t < nTeams; t++) {
+    const def = TEAM_DEF[t];
+    const team = { ...def, ai: rec.mode === 0 ? t > 0 : false, slugs: [], next: 0, ammo: Object.fromEntries(WEAPONS.map(w => [w.id, w.ammo])), weapon: 'bazooka' };
+    for (let k = 0; k < rec.slugs; k++) team.slugs.push({ team, name: names.pop(), hp: 100, alive: true, x: 0, y: 0, vx: 0, vy: 0, face: 1, aim: .5, ground: false, show: 100, wob: R() * 6 });
+    G.teams.push(team);
+  }
+  // drop slugs on random dry ground, spread out
+  const all = G.teams.flatMap(t => t.slugs).sort(() => R() - .5);
+  all.forEach((s, k) => {
+    for (let tries = 0; tries < 200; tries++) {
+      const x = rnd(260, W - 260);
+      if (all.some(o => o !== s && o.x && Math.abs(o.x - x) < 90)) continue;
+      let y = 10; while (y < H && !solid(x, y)) y++;
+      if (y >= waterY - 10) continue;
+      s.x = x; s.y = y - 1; s.face = x < W / 2 ? 1 : -1; s.ground = true; break;
+    }
+  });
+  state = 'play';
+  document.body.classList.add('playing');
+  for (const id of ['menu', 'over', 'pause']) $(id).hidden = true;
+  buildWeaponBar();
+  nextTurn();
+}
+const aliveTeams = () => G.teams.filter(t => t.slugs.some(s => s.alive));
+const teamHp = t => t.slugs.reduce((a, s) => a + (s.alive ? Math.max(0, s.hp) : 0), 0);
+
+function nextTurn() {
+  const alive = aliveTeams();
+  if (alive.length <= 1) return gameOver(alive[0]);
+  G.turnNo++;
+  // sudden death: the sea starts to rise
+  if (G.turnNo > G.teams.length * 7) { waterY -= 22; if (G.turnNo === G.teams.length * 7 + 1) banner('SUDDEN DEATH', 'The water is rising', '#4f8bff', 2.5); }
+  for (let k = 1; k <= G.teams.length; k++) {
+    const t = G.teams[(G.turn + k) % G.teams.length];
+    if (t.slugs.some(s => s.alive)) { G.turn = G.teams.indexOf(t); break; }
+  }
+  const team = G.teams[G.turn];
+  let s = null;
+  for (let k = 0; k < team.slugs.length; k++) { const c = team.slugs[(team.next + k) % team.slugs.length]; if (c.alive) { s = c; team.next = (team.slugs.indexOf(c) + 1) % team.slugs.length; break; } }
+  G.active = s; G.timer = 45; G.retreat = 0; G.power = 0; G.charging = false; G.shots = 0; G.cursor = null; G.ai = null;
+  G.wind = Math.round(rnd(-1, 1) * 10) / 10;
+  if (G.turnNo > 1 && R() < .45) dropCrate();
+  cam.free = 0;
+  if (!team.ai && rec.mode === 1) { G.phase = 'handoff'; $('handTitle').textContent = `${team.name}: ${s.name}`; $('handTitle').style.color = team.color; $('handoff').hidden = false; return; }
+  startTurn();
+}
+function startTurn() {
+  const team = G.teams[G.turn];
+  G.phase = 'aim';
+  if (team.ai) G.ai = { t: .9, plan: null };
+  banner(team.ai ? `${team.name}` : (rec.mode === 0 ? 'Your turn' : team.name), G.active.name, team.color, 1.3);
+  selectWeapon(team.weapon);
+  tone(660, .1, .05);
+}
+function dropCrate() {
+  const x = rnd(300, W - 300), type = R() < .45 ? 'health' : 'weapon';
+  crates.push({ x, y: -40, vy: 0, type, w: type === 'weapon' ? pick(['cluster', 'dynamite', 'air', 'teleport']) : null, para: true, landed: false });
+}
+function gameOver(winner) {
+  G.over = true; state = 'over'; document.body.classList.remove('playing');
+  rec.games++;
+  const youWon = rec.mode === 0 && winner && !winner.ai;
+  if (youWon) rec.wins++;
+  save();
+  $('overTitle').textContent = !winner ? 'Nobody survived' : youWon ? 'Victory!' : rec.mode === 0 ? 'Defeat' : `${winner.name} win!`;
+  $('overTitle').style.color = winner ? winner.color : '';
+  $('overText').textContent = winner ? `${winner.slugs.filter(s => s.alive).map(s => s.name).join(', ')} ${winner.slugs.filter(s => s.alive).length > 1 ? 'are' : 'is'} the last slime standing after ${G.turnNo} turns.` : 'The sea took everyone.';
+  $('over').hidden = false;
+}
+
+// ---------- slug movement
+function walk(s, dir, dt) {
+  s.face = dir;
+  const nx = s.x + dir * 62 * dt;
+  let ny = s.y;
+  if (solid(nx, ny)) { let up = 0; while (up <= 9 && solid(nx, ny - up)) up++; if (up > 9) return; ny -= up; }
+  if (solid(nx, ny - 16)) return;
+  let drop = 0; while (drop < 7 && !solid(nx, ny + 1)) { ny++; drop++; }
+  s.x = nx; s.y = ny;
+  if (!solid(s.x, s.y + 1)) { s.ground = false; s.vx = dir * 50; s.vy = 0; }
+}
+function jump(s) { if (!s.ground) return; s.ground = false; s.vx = s.face * 170; s.vy = -260; tone(300, .12, .05, 'triangle', 600); }
+function slugPhysics(s, dt) {
+  if (!s.alive) return;
+  if (s.ground) {
+    if (!solid(s.x, s.y + 1) && !solid(s.x, s.y + 2)) { s.ground = false; s.vx = 0; s.vy = 0; }
+    else if (solid(s.x, s.y)) { let up = 0; while (up < 20 && solid(s.x, s.y - up)) up++; s.y -= up; }
+  }
+  if (!s.ground) {
+    s.vy += GRAV * dt;
+    const steps = Math.max(1, Math.ceil(Math.hypot(s.vx, s.vy) * dt / 3));
+    for (let k = 0; k < steps; k++) {
+      const nx = s.x + s.vx * dt / steps, ny = s.y + s.vy * dt / steps;
+      if (s.vy > 0 && solid(nx, ny)) {
+        let y = ny; while (y > 0 && solid(nx, y)) y--;
+        if (ny - y < 12) {
+          s.x = nx; s.y = y;
+          const impact = s.vy;
+          if (Math.abs(s.vx) > 260 && impact < 420) { s.vx *= .45; s.vy = -impact * .25; continue; }
+          s.ground = true; s.vx = 0; s.vy = 0;
+          if (impact > 540) hurt(s, Math.round((impact - 540) * .06));
+          break;
+        }
+      }
+      if (solid(nx, ny - 9)) { s.vx = -s.vx * .35; }
+      else s.x = nx;
+      if (s.vy < 0 && solid(s.x, ny - 18)) s.vy = Math.abs(s.vy) * .2;
+      else if (!(s.vy > 0 && solid(s.x, ny))) s.y = ny;
+    }
+  }
+  if (s.y > waterY + 6 || s.x < -60 || s.x > W + 60) drown(s);
+}
+function drown(s) {
+  if (!s.alive) return;
+  s.alive = false; s.hp = 0; s.show = 0;
+  splash(clamp(s.x, 0, W), waterY);
+  floats.push({ x: s.x, y: waterY - 30, t: 1.8, text: `${s.name} drowned`, c: '#9fd0ff' });
+  noise(.6, 900, .3);
+}
+function hurt(s, d) {
+  if (!s.alive || d <= 0) return;
+  s.hp -= d; s.hurt = (s.hurt || 0) + d;
+  floats.push({ x: s.x, y: s.y - 40, t: 1.4, text: '-' + d, c: s.team.color });
+}
+
+// ---------- projectiles & explosions
+function launch(type, x, y, vx, vy, owner) {
+  const p = { type, x, y, vx, vy, owner, t: 0, fuse: 0, bounce: false, wind: false, r: 45, dmg: 50 };
+  if (type === 'bazooka') { p.wind = true; }
+  else if (type === 'grenade') { p.fuse = 3; p.bounce = true; }
+  else if (type === 'cluster') { p.fuse = 3; p.bounce = true; p.r = 35; p.dmg = 30; }
+  else if (type === 'bomblet') { p.r = 26; p.dmg = 22; }
+  else if (type === 'dynamite') { p.fuse = 5; p.bounce = true; p.r = 78; p.dmg = 75; p.damp = .15; }
+  else if (type === 'missile') { p.wind = true; p.r = 32; p.dmg = 30; }
+  projs.push(p); return p;
+}
+function stepProj(p, dt) {
+  p.t += dt;
+  p.vy += GRAV * dt * (p.type === 'missile' ? .4 : 1);
+  if (p.wind) p.vx += G.wind * WIND * dt;
+  const steps = Math.max(1, Math.ceil(Math.hypot(p.vx, p.vy) * dt / 3));
+  for (let k = 0; k < steps; k++) {
+    const nx = p.x + p.vx * dt / steps, ny = p.y + p.vy * dt / steps;
+    if (solid(nx, ny)) {
+      if (!p.bounce) { p.x = nx; p.y = ny; return 'boom'; }
+      const [qx, qy] = normalAt(nx, ny), dot = p.vx * qx + p.vy * qy, damp = p.damp ?? .45;
+      p.vx = (p.vx - 2 * dot * qx) * damp; p.vy = (p.vy - 2 * dot * qy) * damp;
+      if (Math.hypot(p.vx, p.vy) > 60) tone(500, .04, .03, 'triangle');
+      return 'bounce';
+    }
+    p.x = nx; p.y = ny;
+    if (!p.bounce && p.t > .12) for (const t of G.teams) for (const s of t.slugs) if (s.alive && Math.abs(s.x - p.x) < 11 && p.y > s.y - 22 && p.y < s.y + 2) return 'boom';
+  }
+  if (p.fuse && p.t >= p.fuse) return 'boom';
+  if (p.y > waterY || p.x < -300 || p.x > W + 300) return 'sink';
+  return null;
+}
+function explode(x, y, r, dmg) {
+  carve(x, y, r);
+  shake = Math.max(shake, r / 5);
+  noise(.6 + r / 120, 380, Math.min(.6, .2 + r / 160));
+  for (let k = 0; k < r * .9; k++) { const a = R() * TAU, s = rnd(40, r * 6); parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 80, t: rnd(.3, .8), c: pick(['#ffd23f', '#ff8a2a', '#ff4f2a', '#fff']), s: rnd(3, 7), g: 1 }); }
+  for (let k = 0; k < r * .4; k++) { const a = R() * TAU, s = rnd(20, 90); parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 40, t: rnd(.8, 1.6), c: 'rgba(60,60,64,.55)', s: rnd(8, 16), g: -.2 }); }
+  const reach = r * 1.6;
+  for (const t of G.teams) for (const s of t.slugs) {
+    if (!s.alive) continue;
+    const dx = s.x - x, dy = s.y - 9 - y, d = Math.hypot(dx, dy);
+    if (d > reach) continue;
+    const f = 1 - d / reach;
+    hurt(s, Math.round(dmg * f));
+    const l = d || 1;
+    s.ground = false; s.vx += dx / l * 420 * f; s.vy += dy / l * 420 * f - 220 * f;
+  }
+  for (const c of crates) if (!c.gone && Math.hypot(c.x - x, c.y - y) < reach) { c.gone = true; c.boom = c.type === 'weapon'; }
+}
+function splash(x, y) {
+  for (let k = 0; k < 20; k++) parts.push({ x, y, vx: rnd(-120, 120), vy: rnd(-320, -80), t: rnd(.4, .9), c: '#9fd0ff', s: rnd(3, 6), g: 1 });
+}
+
+// ---------- weapons in use
+function aimAngle(s, aim = s.aim) { return s.face > 0 ? -aim : Math.PI + aim; }
+function fireWeapon() {
+  const team = G.teams[G.turn], s = G.active, id = team.weapon, w = WD[id];
+  if (team.ammo[id] <= 0) return;
+  const a = aimAngle(s), mx = s.x + Math.cos(a) * 16, my = s.y - 12 + Math.sin(a) * 16;
+  if (id === 'bazooka' || id === 'grenade' || id === 'cluster') {
+    const sp = 260 + G.power * 940;
+    launch(id, mx, my, Math.cos(a) * sp, Math.sin(a) * sp, s);
+    noise(.25, 1500, .2, 'bandpass');
+  } else if (id === 'dynamite') {
+    launch('dynamite', s.x + s.face * 10, s.y - 10, s.face * 70, -90, s);
+    tone(200, .2, .05, 'sawtooth');
+  } else if (id === 'shotgun') {
+    shotgun(s, a); G.shots++;
+    if (G.shots < 2) { useAmmo(team, id); return; }
+  } else if (id === 'bat') {
+    bat(s, a);
+  } else if (id === 'air') {
+    if (!G.cursor) return;
+    const cx = G.cursor.x;
+    for (let k = 0; k < 5; k++) { const p = launch('missile', cx - 120 + k * 60 - G.wind * 90, -40 - k * 12, G.wind * 40, 280, s); p.t = .2; }
+    tone(900, .6, .05, 'sawtooth', 300);
+  } else if (id === 'teleport') {
+    if (!G.cursor || !canStand(G.cursor.x, G.cursor.y)) { hint('Pick an open spot above the water'); return; }
+    s.x = G.cursor.x; s.y = G.cursor.y; s.ground = false; s.vx = s.vy = 0;
+    for (let k = 0; k < 20; k++) parts.push({ x: s.x, y: s.y - 10, vx: rnd(-80, 80), vy: rnd(-80, 80), t: .6, c: '#b48cff', s: 4, g: 0 });
+    tone(400, .3, .06, 'sine', 1600);
+  }
+  useAmmo(team, id);
+  G.phase = 'fired'; G.retreat = id === 'teleport' ? .4 : 3; G.charging = false; G.power = 0;
+  hint('');
+}
+function useAmmo(team, id) { if (team.ammo[id] !== Infinity) team.ammo[id]--; buildWeaponBar(); }
+function canStand(x, y) { return y > 10 && y < waterY - 20 && !solid(x, y) && !solid(x, y - 16) && x > 20 && x < W - 20; }
+function shotgun(s, a) {
+  let x = s.x, y = s.y - 12;
+  const dx = Math.cos(a), dy = Math.sin(a);
+  noise(.2, 2200, .3, 'bandpass');
+  for (let d = 0; d < 800; d += 3) {
+    x += dx * 3; y += dy * 3;
+    for (const t of G.teams) for (const o of t.slugs) if (o !== s && o.alive && Math.abs(o.x - x) < 10 && y > o.y - 20 && y < o.y + 2) {
+      hurt(o, 25); o.ground = false; o.vx += dx * 260; o.vy += dy * 260 - 120;
+      tracer(s, x, y); return;
+    }
+    if (solid(x, y)) { carve(x, y, 13); tracer(s, x, y); return; }
+    if (y > waterY) break;
+  }
+  tracer(s, x, y);
+}
+function tracer(s, x, y) { parts.push({ line: [s.x, s.y - 12, x, y], t: .15, c: '#fff6c8' }); }
+function bat(s, a) {
+  tone(180, .15, .08, 'square');
+  for (const t of G.teams) for (const o of t.slugs) {
+    if (o === s || !o.alive) continue;
+    const dx = o.x - s.x, dy = o.y - s.y;
+    if (Math.abs(dy) < 26 && dx * s.face > 0 && Math.abs(dx) < 34) {
+      hurt(o, 30); o.ground = false;
+      const la = s.face > 0 ? -Math.max(.5, s.aim) : Math.PI + Math.max(.5, s.aim);
+      o.vx = Math.cos(la) * 720; o.vy = Math.sin(la) * 720;
+      shake = 8; noise(.2, 600, .4);
+    }
+  }
+}
+
+// ---------- computer player
+// Fly a shot through the current terrain without changing it; report where it goes off.
+function simShot(type, x, y, vx, vy) {
+  const p = { type, x, y, vx, vy, t: 0, fuse: type === 'bazooka' ? 0 : 3, bounce: type !== 'bazooka', wind: type === 'bazooka', damp: .45 };
+  const dt = 1 / 60;
+  for (let k = 0; k < 60 * 6; k++) {
+    p.t += dt; p.vy += GRAV * dt; if (p.wind) p.vx += G.wind * WIND * dt;
+    const steps = Math.max(1, Math.ceil(Math.hypot(p.vx, p.vy) * dt / 4));
+    for (let j = 0; j < steps; j++) {
+      const nx = p.x + p.vx * dt / steps, ny = p.y + p.vy * dt / steps;
+      if (solid(nx, ny)) {
+        if (!p.bounce) return { x: nx, y: ny };
+        const [qx, qy] = normalAt(nx, ny), dot = p.vx * qx + p.vy * qy;
+        p.vx = (p.vx - 2 * dot * qx) * .45; p.vy = (p.vy - 2 * dot * qy) * .45; break;
+      }
+      p.x = nx; p.y = ny;
+      if (!p.bounce && p.t > .12) for (const t of G.teams) for (const s of t.slugs) if (s.alive && Math.abs(s.x - p.x) < 11 && p.y > s.y - 22 && p.y < s.y + 2) return { x: p.x, y: p.y };
+    }
+    if (p.fuse && p.t >= p.fuse) return { x: p.x, y: p.y };
+    if (p.y > waterY || p.x < -200 || p.x > W + 200) return null;
+  }
+  return null;
+}
+function scoreBlast(x, y, r, dmg, me) {
+  let score = 0;
+  for (const t of G.teams) for (const s of t.slugs) {
+    if (!s.alive) continue;
+    const d = Math.hypot(s.x - x, s.y - 9 - y), reach = r * 1.6;
+    if (d > reach) continue;
+    let v = dmg * (1 - d / reach);
+    if (v >= s.hp) v += 40;
+    if (s.y + 40 > waterY) v += 15;
+    score += t === me.team ? -v * (s === me ? 2.2 : 1.6) : v;
+  }
+  return score;
+}
+function aiPlan() {
+  const s = G.active, team = s.team, skill = rec.skill;
+  const enemies = G.teams.filter(t => t !== team).flatMap(t => t.slugs.filter(o => o.alive));
+  let best = { score: 4, weapon: 'bazooka', face: s.face, aim: .6, power: .6 };
+  const opts = ['bazooka', 'grenade'];
+  if (team.ammo.cluster > 0) opts.push('cluster');
+  for (const wid of opts) {
+    const r = wid === 'cluster' ? 50 : 45, dmg = wid === 'cluster' ? 55 : 50;
+    for (const face of [-1, 1]) for (let aim = -.6; aim <= 1.45; aim += .08) for (let pw = .15; pw <= 1.001; pw += .085) {
+      const a = face > 0 ? -aim : Math.PI + aim, sp = 260 + pw * 940;
+      const hit = simShot(wid, s.x + Math.cos(a) * 16, s.y - 12 + Math.sin(a) * 16, Math.cos(a) * sp, Math.sin(a) * sp);
+      if (!hit) continue;
+      const sc = scoreBlast(hit.x, hit.y, r, dmg, s) - (wid === 'cluster' ? 8 : 0);
+      if (sc > best.score) best = { score: sc, weapon: wid, face, aim, power: pw };
+    }
+  }
+  // close up: shotgun, bat or dynamite can beat a lobbed shot
+  for (const o of enemies) {
+    const dx = o.x - s.x, dy = (o.y - 12) - (s.y - 12), d = Math.hypot(dx, dy);
+    if (d < 36 && Math.abs(dy) < 24 && 32 > best.score) best = { score: 32 + (o.y > waterY - 200 ? 25 : 0), weapon: 'bat', face: Math.sign(dx) || 1, aim: .7, power: 0 };
+    if (d < 420 && clearLine(s.x, s.y - 12, o.x, o.y - 10)) {
+      const sc = 25 * 2 + (o.hp <= 50 ? 40 : 0);
+      if (sc > best.score) best = { score: sc, weapon: 'shotgun', face: Math.sign(dx) || 1, aim: Math.atan2(-dy, Math.abs(dx)), power: 0 };
+    }
+  }
+  if (team.ammo.air > 0) {
+    // an air strike on a group of enemies out in the open
+    for (const o of enemies) {
+      let sc = 0; for (const e of enemies) if (Math.abs(e.x - o.x) < 150) sc += 30;
+      for (const f of team.slugs) if (f.alive && Math.abs(f.x - o.x) < 150) sc -= 60;
+      if (sc > best.score + 5) best = { score: sc, weapon: 'air', target: { x: o.x, y: o.y - 100 } };
+    }
+  }
+  // the worse the skill, the shakier the hand
+  const err = [.16, .07, .02][skill], perr = [.16, .07, .02][skill];
+  if (best.aim !== undefined && best.weapon !== 'bat') { best.aim += rnd(-err, err); best.power = clamp(best.power * (1 + rnd(-perr, perr)), .05, 1); }
+  return best;
+}
+function clearLine(x0, y0, x1, y1) {
+  const d = Math.hypot(x1 - x0, y1 - y0), n = Math.ceil(d / 6);
+  for (let i = 1; i < n; i++) if (solid(x0 + (x1 - x0) * i / n, y0 + (y1 - y0) * i / n)) return false;
+  return true;
+}
+function aiTurn(dt) {
+  const ai = G.ai, s = G.active, team = s.team;
+  if (ai.t > 0) { ai.t -= dt; return; }
+  if (!ai.plan) {
+    ai.plan = aiPlan();
+    selectWeapon(ai.plan.weapon);
+    // nothing worth shooting at: crawl toward the nearest enemy and look again
+    if (ai.plan.score <= 4 && !ai.walked) {
+      const enemies = G.teams.filter(t => t !== team).flatMap(t => t.slugs.filter(o => o.alive));
+      let near = enemies[0]; for (const o of enemies) if (Math.abs(o.x - s.x) < Math.abs(near.x - s.x)) near = o;
+      ai.walk = 1.6; ai.dir = Math.sign(near.x - s.x) || 1; ai.walked = true; ai.plan = null;
+    }
+    return;
+  }
+  if (ai.walk > 0) { ai.walk -= dt; walk(s, ai.dir, dt); if (ai.walk <= 0) ai.t = .3; return; }
+  const p = ai.plan;
+  if (p.weapon === 'air') { G.cursor = p.target; ai.fireT = (ai.fireT || .8) - dt; if (ai.fireT <= 0) fireWeapon(); return; }
+  s.face = p.face;
+  const da = p.aim - s.aim;
+  if (Math.abs(da) > .02) { s.aim += clamp(da, -1.6 * dt, 1.6 * dt); return; }
+  if (WD[p.weapon].charge) {
+    G.charging = true; G.power = Math.min(1, G.power + dt * .9);
+    if (G.power >= p.power) fireWeapon();
+  } else { ai.gap = (ai.gap || 0) - dt; if (ai.gap <= 0) { fireWeapon(); ai.gap = .7; } }
+}
+
+// ---------- update
+function update(dt) {
+  time += dt; shake *= Math.exp(-7 * dt);
+  for (const p of parts) { p.t -= dt; if (!p.line) { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += GRAV * (p.g ?? 1) * .5 * dt; } }
+  for (let i = parts.length - 1; i >= 0; i--) if (parts[i].t <= 0) parts.splice(i, 1);
+  for (const f of floats) { f.t -= dt; f.y -= 30 * dt; }
+  for (let i = floats.length - 1; i >= 0; i--) if (floats[i].t <= 0) floats.splice(i, 1);
+  if (state !== 'play' || !G) return;
+  const s = G.active, team = G.teams[G.turn];
+
+  if (G.phase === 'aim' || G.phase === 'fired') {
+    G.timer -= dt;
+    if (G.phase === 'aim' && G.timer <= 0) { G.phase = 'fired'; G.retreat = 0; G.charging = false; hint(''); }
+  }
+  if ((G.phase === 'aim' || (G.phase === 'fired' && G.retreat > 0)) && s && s.alive) {
+    if (team.ai && G.phase === 'aim') aiTurn(dt);
+    else if (!team.ai) humanControl(dt);
+  }
+  if (G.phase === 'fired') G.retreat -= dt;
+
+  for (const t of G.teams) for (const sl of t.slugs) slugPhysics(sl, dt);
+  for (const p of projs) {
+    const r = stepProj(p, dt);
+    if (r === 'boom') { p.dead = true; explode(p.x, p.y, p.r, p.dmg); if (p.type === 'cluster') for (let k = 0; k < 5; k++) launch('bomblet', p.x, p.y - 6, rnd(-200, 200), rnd(-380, -200), null); }
+    else if (r === 'sink') { p.dead = true; splash(p.x, waterY); noise(.4, 900, .15); }
+    if (!p.dead && (p.type === 'bazooka' || p.type === 'missile') && R() < .7) parts.push({ x: p.x, y: p.y, vx: 0, vy: 0, t: .5, c: 'rgba(220,220,225,.5)', s: 5, g: -.1 });
+  }
+  for (let i = projs.length - 1; i >= 0; i--) if (projs[i].dead) projs.splice(i, 1);
+  for (const c of crates) {
+    if (c.landed) { if (!solid(c.x, c.y + 1)) c.landed = false; else continue; }
+    c.vy = Math.min(c.vy + GRAV * dt, c.para ? 70 : 600); c.y += c.vy * dt;
+    if (solid(c.x, c.y)) { while (solid(c.x, c.y)) c.y--; c.landed = true; c.para = false; }
+    if (c.y > waterY) c.gone = true;
+  }
+  if (s && s.alive) for (const c of crates) if (!c.gone && Math.abs(c.x - s.x) < 20 && Math.abs(c.y - s.y) < 26) {
+    c.gone = true; tone(700, .1, .06); tone(1050, .12, .06);
+    if (c.type === 'health') { s.hp += 30; floats.push({ x: s.x, y: s.y - 40, t: 1.4, text: '+30', c: '#9bf07a' }); }
+    else { team.ammo[c.w] = (team.ammo[c.w] === Infinity ? Infinity : team.ammo[c.w] + 1); floats.push({ x: s.x, y: s.y - 40, t: 1.6, text: '+1 ' + WD[c.w].name, c: '#f6c453' }); buildWeaponBar(); }
+  }
+  for (let i = crates.length - 1; i >= 0; i--) if (crates[i].gone) { const c = crates.splice(i, 1)[0]; if (c.boom) explode(c.x, c.y - 10, 30, 25); }
+
+  if (G.phase === 'between' && (G.betweenT -= dt) <= 0) { G.phase = 'next'; nextTurn(); return; }
+  // end of turn: wait until everything has come to rest
+  if (G.phase === 'fired' && G.retreat <= 0) { G.phase = 'settle'; G.settleT = 0; }
+  if (G.phase === 'settle') {
+    G.settleT += dt;
+    const calm = !projs.length && G.teams.every(t => t.slugs.every(sl => !sl.alive || sl.ground));
+    if ((calm && G.settleT > .6) || G.settleT > 9) {
+      // slugs out of health pop, which can set off more
+      const dying = G.teams.flatMap(t => t.slugs).filter(sl => sl.alive && sl.hp <= 0);
+      if (dying.length && !G.popping) {
+        G.popping = true;
+        for (const sl of dying) { sl.alive = false; graves.push({ x: sl.x, y: sl.y, c: sl.team.color }); floats.push({ x: sl.x, y: sl.y - 30, t: 1.8, text: `${sl.name} popped`, c: sl.team.color }); explode(sl.x, sl.y - 8, 22, 12); }
+        G.settleT = 0; return;
+      }
+      G.popping = false;
+      for (const t of G.teams) for (const sl of t.slugs) { sl.show = Math.max(0, sl.hp); sl.hurt = 0; }
+      G.phase = 'between'; G.betweenT = .5;
+    }
+  }
+  updCam(dt);
+}
+function humanControl(dt) {
+  const s = G.active, team = s.team, w = WD[team.weapon], k = n => keys[n] || touch[n];
+  const left = k('ArrowLeft') || k('KeyA') || touch.left, right = k('ArrowRight') || k('KeyD') || touch.right;
+  const up = k('ArrowUp') || k('KeyW') || touch.up, down = k('ArrowDown') || k('KeyS') || touch.down;
+  if (G.phase === 'aim' && w.target) {
+    if (!G.cursor) G.cursor = { x: s.x + s.face * 200, y: s.y - 120 };
+    G.cursor.x = clamp(G.cursor.x + ((right ? 1 : 0) - (left ? 1 : 0)) * 420 * dt, 0, W);
+    G.cursor.y = clamp(G.cursor.y + ((down ? 1 : 0) - (up ? 1 : 0)) * 420 * dt, 0, H);
+    return;
+  }
+  if (s.ground && !G.charging) { if (left) walk(s, -1, dt); else if (right) walk(s, 1, dt); }
+  if (G.phase === 'aim') {
+    if (up) s.aim = Math.min(1.5, s.aim + 1.5 * dt);
+    if (down) s.aim = Math.max(-1.5, s.aim - 1.5 * dt);
+    if (G.charging) { G.power = Math.min(1, G.power + dt * .9); if (G.power >= 1) fireWeapon(); }
+  }
+}
+function fireDown() {
+  if (!G || state !== 'play' || G.phase !== 'aim' || G.teams[G.turn].ai) return;
+  const w = WD[G.teams[G.turn].weapon];
+  if (w.charge) { G.charging = true; G.power = 0; } else fireWeapon();
+}
+function fireUp() { if (G && G.charging && G.phase === 'aim' && !G.teams[G.turn].ai) fireWeapon(); }
+
+function updCam(dt) {
+  if (cam.free > 0) { cam.free -= dt; return; }
+  let fx, fy;
+  const p = projs[0];
+  if (p) { fx = p.x; fy = p.y; }
+  else if (G.cursor && G.phase === 'aim') { fx = G.cursor.x; fy = G.cursor.y; }
+  else if (G.active) { fx = G.active.x; fy = G.active.y - (document.body.classList.contains('touch-on') ? -60 : 80); }
+  else return;
+  const k = 1 - Math.exp(-(p ? 6 : 3) * dt);
+  cam.x += (fx - cam.x) * k; cam.y += (fy - cam.y) * k;
+  clampCam();
+}
+function clampCam() {
+  const hw = SW / 2 / zoom, hh = SH / 2 / zoom;
+  // on touch screens the buttons cover the bottom, so let the view scroll further down
+  const pad = (document.body.classList.contains('touch-on') ? 280 : 60) / zoom;
+  cam.x = clamp(cam.x, Math.min(hw, W / 2), Math.max(W - hw, W / 2));
+  cam.y = clamp(cam.y, Math.min(hh - 200, H / 2), Math.max(H - hh + pad, H / 2));
+}
+
+// ---------- rendering
+function render() {
+  const d = DPR;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const g = ctx.createLinearGradient(0, 0, 0, SH * d);
+  g.addColorStop(0, '#3a6fb5'); g.addColorStop(.6, '#9ac8e8'); g.addColorStop(1, '#d9ecf5');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, cv.width, cv.height);
+  const sx = (R() - .5) * shake, sy = (R() - .5) * shake;
+  // far hills, drawn with a little parallax
+  ctx.setTransform(zoom * d, 0, 0, zoom * d, (SW / 2 - cam.x * zoom * .5 + sx) * d, (SH / 2 - cam.y * zoom * .7 + sy) * d);
+  ctx.fillStyle = 'rgba(70,110,140,.45)'; ctx.beginPath(); ctx.moveTo(-800, H);
+  for (let x = -800; x <= W + 800; x += 40) ctx.lineTo(x, H * .55 + Math.sin(x * .004) * 60 + Math.sin(x * .011) * 25);
+  ctx.lineTo(W + 800, H); ctx.fill();
+  for (let k = 0; k < 6; k++) { const cx = ((k * 520 + time * 12 * (G ? G.wind * 4 + 1 : 1)) % (W + 1200)) - 600, cy = 120 + k * 37 % 140; ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.beginPath(); ctx.ellipse(cx, cy, 90, 26, 0, 0, TAU); ctx.ellipse(cx + 50, cy - 14, 60, 24, 0, 0, TAU); ctx.fill(); }
+  ctx.setTransform(zoom * d, 0, 0, zoom * d, (SW / 2 - cam.x * zoom + sx) * d, (SH / 2 - cam.y * zoom + sy) * d);
+  ctx.drawImage(back, 0, 0); ctx.drawImage(land, 0, 0);
+  if (!G) { drawWater(); return; }
+  for (const gr of graves) { ctx.fillStyle = '#ddd'; ctx.fillRect(gr.x - 2, gr.y - 18, 4, 18); ctx.fillRect(gr.x - 7, gr.y - 13, 14, 4); ctx.fillStyle = gr.c; ctx.fillRect(gr.x - 7, gr.y - 2, 14, 2); }
+  for (const c of crates) drawCrate(c);
+  for (const t of G.teams) for (const s of t.slugs) if (s.alive) drawSlug(s);
+  for (const p of projs) drawProj(p);
+  for (const p of parts) {
+    if (p.line) { ctx.strokeStyle = p.c; ctx.lineWidth = 2; ctx.globalAlpha = p.t / .15; ctx.beginPath(); ctx.moveTo(p.line[0], p.line[1]); ctx.lineTo(p.line[2], p.line[3]); ctx.stroke(); ctx.globalAlpha = 1; continue; }
+    ctx.globalAlpha = Math.min(1, p.t * 2); ctx.fillStyle = p.c; ctx.fillRect(p.x - p.s / 2, p.y - p.s / 2, p.s, p.s);
+  }
+  ctx.globalAlpha = 1;
+  drawAim();
+  drawWater();
+  ctx.textAlign = 'center';
+  for (const f of floats) { ctx.globalAlpha = Math.min(1, f.t); ctx.font = '400 18px Bungee, Impact, sans-serif'; ctx.fillStyle = '#15151d'; ctx.fillText(f.text, f.x + 1.5, f.y + 1.5); ctx.fillStyle = f.c; ctx.fillText(f.text, f.x, f.y); }
+  ctx.globalAlpha = 1;
+}
+function drawWater() {
+  ctx.fillStyle = 'rgba(30,80,150,.85)';
+  ctx.beginPath(); ctx.moveTo(-1000, H + 400);
+  for (let x = -1000; x <= W + 1000; x += 30) ctx.lineTo(x, waterY + Math.sin(x * .02 + time * 2) * 5);
+  ctx.lineTo(W + 1000, H + 400); ctx.fill();
+  ctx.fillStyle = 'rgba(160,210,255,.5)';
+  for (let x = -1000; x <= W + 1000; x += 90) ctx.fillRect(x + Math.sin(time + x) * 10, waterY + 8 + Math.sin(x * .02 + time * 2) * 5, 30, 3);
+}
+function drawSlug(s) {
+  const t = s.team, act = G.active === s, wob = Math.sin(time * 3 + s.wob) * 1.2;
+  ctx.save(); ctx.translate(s.x, s.y); ctx.scale(s.face, 1);
+  ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.beginPath(); ctx.ellipse(0, 0, 12, 3, 0, 0, TAU); ctx.fill();
+  // body: a fat slug, tail behind, head up front
+  ctx.fillStyle = '#c9d96a';
+  ctx.beginPath(); ctx.moveTo(-14, 0); ctx.quadraticCurveTo(-12, -9, -2, -10); ctx.quadraticCurveTo(6, -22 + wob, 9, -16); ctx.quadraticCurveTo(12, -6, 10, 0); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#a9bb4e'; ctx.beginPath(); ctx.ellipse(-4, -2, 9, 2.5, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = t.color; ctx.fillRect(1, -15 + wob * .5, 10, 3.5);
+  // eye stalks
+  ctx.strokeStyle = '#a9bb4e'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(7, -17 + wob); ctx.lineTo(9, -26 + wob); ctx.moveTo(10, -16 + wob); ctx.lineTo(14, -24 + wob); ctx.stroke();
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(9, -27 + wob, 2.8, 0, TAU); ctx.arc(14, -25 + wob, 2.8, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(10, -27 + wob, 1.3, 0, TAU); ctx.arc(15, -25 + wob, 1.3, 0, TAU); ctx.fill();
+  ctx.restore();
+  ctx.textAlign = 'center'; ctx.font = '700 13px "Barlow Semi Condensed", sans-serif';
+  const label = `${s.name} ${Math.max(0, Math.round(s.show - (s.hurt || 0) * 0))}`;
+  const y = s.y - 40 - (act ? 8 + Math.sin(time * 6) * 3 : 0);
+  ctx.fillStyle = 'rgba(0,0,0,.55)'; const w = ctx.measureText(label).width + 10; ctx.fillRect(s.x - w / 2, y - 11, w, 15);
+  ctx.fillStyle = t.color; ctx.fillText(label, s.x, y + 1);
+  if (act && G.phase === 'aim') { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(s.x - 6, y - 22); ctx.lineTo(s.x + 6, y - 22); ctx.lineTo(s.x, y - 14); ctx.fill(); }
+}
+function drawAim() {
+  const s = G.active; if (!s || !s.alive || G.phase !== 'aim') return;
+  const w = WD[G.teams[G.turn].weapon];
+  if (w.target) {
+    const c = G.cursor; if (!c) return;
+    ctx.strokeStyle = w.id === 'teleport' ? (canStand(c.x, c.y) ? '#b48cff' : '#ff4f6d') : '#ff4f6d'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(c.x, c.y, 16, 0, TAU); ctx.moveTo(c.x - 24, c.y); ctx.lineTo(c.x + 24, c.y); ctx.moveTo(c.x, c.y - 24); ctx.lineTo(c.x, c.y + 24); ctx.stroke();
+    return;
+  }
+  if (w.id === 'dynamite') return;
+  const a = aimAngle(s), cx = s.x + Math.cos(a) * 70, cy = s.y - 12 + Math.sin(a) * 70;
+  ctx.strokeStyle = '#ff4f6d'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(cx, cy, 8, 0, TAU); ctx.moveTo(cx - 12, cy); ctx.lineTo(cx + 12, cy); ctx.moveTo(cx, cy - 12); ctx.lineTo(cx, cy + 12); ctx.stroke();
+  if (G.charging) {
+    for (let k = 0; k < 10; k++) {
+      if (k / 10 > G.power) break;
+      const r = 18 + k * 6; ctx.fillStyle = `hsl(${60 - k * 6},100%,55%)`;
+      ctx.beginPath(); ctx.arc(s.x + Math.cos(a) * r, s.y - 12 + Math.sin(a) * r, 2 + k * .5, 0, TAU); ctx.fill();
+    }
+  }
+}
+function drawProj(p) {
+  ctx.save(); ctx.translate(p.x, p.y);
+  if (p.type === 'bazooka' || p.type === 'missile') { ctx.rotate(Math.atan2(p.vy, p.vx)); ctx.fillStyle = '#555'; ctx.fillRect(-8, -3, 16, 6); ctx.fillStyle = '#ff4f6d'; ctx.fillRect(5, -3, 4, 6); }
+  else if (p.type === 'dynamite') { ctx.fillStyle = '#d12f2f'; ctx.fillRect(-4, -9, 8, 18); ctx.fillStyle = '#ffd23f'; ctx.fillRect(-1, -14, 2, 5 + R() * 2); }
+  else { ctx.fillStyle = p.type === 'cluster' ? '#b48cff' : p.type === 'bomblet' ? '#ff8a2a' : '#3f6b2b'; ctx.beginPath(); ctx.arc(0, 0, p.type === 'bomblet' ? 3.5 : 6, 0, TAU); ctx.fill(); }
+  ctx.restore();
+  if (p.fuse) { ctx.fillStyle = '#fff'; ctx.font = '400 14px Bungee, Impact, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(Math.ceil(p.fuse - p.t), p.x, p.y - 14); }
+}
+function drawCrate(c) {
+  ctx.save(); ctx.translate(c.x, c.y);
+  if (c.para) { ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-10, -18); ctx.lineTo(-22, -42); ctx.moveTo(10, -18); ctx.lineTo(22, -42); ctx.stroke(); ctx.fillStyle = '#ff8a2a'; ctx.beginPath(); ctx.arc(0, -42, 24, Math.PI, 0); ctx.fill(); }
+  ctx.fillStyle = c.type === 'health' ? '#f2f2f2' : '#8b5a2b'; ctx.fillRect(-10, -18, 20, 18);
+  ctx.fillStyle = c.type === 'health' ? '#ff4f6d' : '#f6c453';
+  if (c.type === 'health') { ctx.fillRect(-2, -15, 4, 12); ctx.fillRect(-6, -11, 12, 4); } else { ctx.font = '400 12px Bungee, Impact, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('?', 0, -5); }
+  ctx.restore();
+}
+
+// ---------- HUD
+let bannerT = 0, hintMsg = '';
+function banner(t, sub, color, dur) {
+  const el = $('banner'); el.textContent = t; el.style.color = color;
+  if (sub) el.appendChild(Object.assign(document.createElement('small'), { textContent: sub }));
+  el.classList.add('on'); bannerT = dur;
+}
+function hint(t) { hintMsg = t; $('hint').textContent = t; $('hint').classList.toggle('on', !!t); }
+let hudKey = '';
+function hud(dt) {
+  if (bannerT > 0 && (bannerT -= dt) <= 0) $('banner').classList.remove('on');
+  if (!G || state !== 'play') return;
+  const team = G.teams[G.turn], s = G.active;
+  const k = [G.turn, Math.ceil(G.timer), G.wind, G.teams.map(teamHp).join('/'), G.phase].join(',');
+  if (k === hudKey) return; hudKey = k;
+  const tm = $('teams'); tm.textContent = '';
+  const max = rec.slugs * 100;
+  for (const t of G.teams) {
+    const row = document.createElement('div'); row.className = 'tm' + (t === team ? ' now' : '');
+    const bar = document.createElement('div'); bar.className = 'bar';
+    const i = document.createElement('i'); i.style.background = t.color; i.style.width = Math.min(100, teamHp(t) / max * 100) + '%';
+    bar.appendChild(i); const n = document.createElement('span'); n.textContent = t.name; n.style.color = t.color;
+    row.append(bar, n); tm.appendChild(row);
+  }
+  $('turn').textContent = s ? `${team.name}: ${s.name}` : ''; $('turn').style.color = team.color;
+  const sec = Math.max(0, Math.ceil(G.timer));
+  $('timer').textContent = G.phase === 'aim' ? sec : G.phase === 'fired' && G.retreat > 0 ? 'Run!' : '';
+  $('timer').classList.toggle('low', sec <= 5 && G.phase === 'aim');
+  const wb = $('windBar'), w = G.wind;
+  wb.style.left = (w < 0 ? 50 + w * 50 : 50) + '%'; wb.style.width = Math.abs(w) * 50 + '%';
+}
+function buildWeaponBar() {
+  const bar = $('weapons'); bar.textContent = '';
+  if (!G) return;
+  const team = G.teams[Math.max(0, G.turn)];
+  WEAPONS.forEach((w, k) => {
+    const b = document.createElement('button'); b.className = 'wp'; b.title = `${k + 1}: ${w.name}`;
+    b.setAttribute('aria-pressed', String(team.weapon === w.id));
+    b.disabled = team.ammo[w.id] <= 0 || team.ai;
+    b.append(Object.assign(document.createElement('i'), { textContent: w.icon }), w.name, Object.assign(document.createElement('small'), { textContent: team.ammo[w.id] === Infinity ? '∞' : `×${team.ammo[w.id]}` }));
+    b.addEventListener('click', () => { audio(); selectWeapon(w.id); });
+    bar.appendChild(b);
+  });
+}
+function selectWeapon(id) {
+  if (!G) return;
+  const team = G.teams[G.turn];
+  if (team.ammo[id] <= 0 || (G.phase !== 'aim' && G.phase !== 'between' && G.phase !== 'handoff')) return;
+  if (G.charging) return;
+  team.weapon = id; G.cursor = null;
+  const w = WD[id];
+  if (!team.ai) hint(w.target ? (id === 'air' ? 'Click where to drop the air strike, or move the cursor and press Space' : 'Click where to teleport, or move the cursor and press Space') : id === 'shotgun' ? 'Two shots, no gravity' : id === 'bat' ? 'Get right next to a slug and swing' : id === 'dynamite' ? 'Drops at your feet: run!' : '');
+  buildWeaponBar();
+}
+
+// ---------- input
+addEventListener('keydown', e => {
+  audio();
+  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Tab'].includes(e.code)) e.preventDefault();
+  if (e.repeat) return;
+  keys[e.code] = true;
+  if (state === 'play' && G) {
+    const human = !G.teams[G.turn].ai;
+    if (e.code === 'Space') fireDown();
+    else if (e.code === 'Enter' && human && G.active && (G.phase === 'aim' || G.phase === 'fired')) jump(G.active);
+    else if (/^Digit[1-8]$/.test(e.code) && human) selectWeapon(WEAPONS[+e.code.slice(5) - 1].id);
+    else if ((e.code === 'KeyQ' || e.code === 'Tab') && human) {
+      const team = G.teams[G.turn], i = WEAPONS.findIndex(w => w.id === team.weapon);
+      for (let k = 1; k <= WEAPONS.length; k++) { const w = WEAPONS[(i + k) % WEAPONS.length]; if (team.ammo[w.id] > 0) { selectWeapon(w.id); break; } }
+    } else if (e.code === 'KeyP' || e.code === 'Escape') pause();
+  } else if (state === 'pause' && (e.code === 'KeyP' || e.code === 'Escape')) resume();
+});
+addEventListener('keyup', e => { keys[e.code] = false; if (e.code === 'Space') fireUp(); });
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; for (const k in touch) touch[k] = false; if (state === 'play') pause(); });
+let drag = null;
+cv.addEventListener('pointerdown', e => {
+  audio();
+  if (!G || state !== 'play') return;
+  const wx = cam.x + (e.clientX - SW / 2) / zoom, wy = cam.y + (e.clientY - SH / 2) / zoom;
+  const team = G.teams[G.turn];
+  if (!team.ai && G.phase === 'aim' && WD[team.weapon].target) { G.cursor = { x: wx, y: wy }; fireWeapon(); return; }
+  drag = { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y };
+});
+addEventListener('pointermove', e => { if (!drag) return; cam.x = drag.cx - (e.clientX - drag.x) / zoom; cam.y = drag.cy - (e.clientY - drag.y) / zoom; clampCam(); if (Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y) > 6) cam.free = 4; });
+addEventListener('pointerup', () => { drag = null; });
+for (const el of document.querySelectorAll('.tb')) {
+  const k = el.dataset.k;
+  el.addEventListener('pointerdown', e => {
+    e.preventDefault(); e.stopPropagation(); audio(); touch[k] = true; el.classList.add('on');
+    if (k === 'fire') fireDown(); else if (k === 'jump' && G && G.active && !G.teams[G.turn].ai) jump(G.active);
+  });
+  const off = () => { if (touch[k] && k === 'fire') fireUp(); touch[k] = false; el.classList.remove('on'); };
+  el.addEventListener('pointerup', off); el.addEventListener('pointercancel', off); el.addEventListener('pointerleave', off);
+}
+if (matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window) document.body.classList.add('touch-on');
+function pause() { state = 'pause'; $('pause').hidden = false; }
+function resume() { state = 'play'; $('pause').hidden = true; }
+$('pauseBtn').addEventListener('click', pause);
+$('resumeBtn').addEventListener('click', resume);
+$('quitBtn').addEventListener('click', showMenu);
+$('menuBtn').addEventListener('click', showMenu);
+$('againBtn').addEventListener('click', newGame);
+$('handBtn').addEventListener('click', () => { $('handoff').hidden = true; startTurn(); });
+$('playBtn').addEventListener('click', () => { audio(); newGame(); });
+
+function setupPick(id, key, after) {
+  const btns = document.querySelectorAll(`#${id} button`);
+  for (const b of btns) b.addEventListener('click', () => { rec[key] = +b.dataset.v; save(); syncMenu(); if (after) after(); });
+}
+setupPick('pMode', 'mode'); setupPick('pTeams', 'teams'); setupPick('pSlugs', 'slugs'); setupPick('pSkill', 'skill');
+function syncMenu() {
+  for (const [id, key] of [['pMode', 'mode'], ['pTeams', 'teams'], ['pSlugs', 'slugs'], ['pSkill', 'skill']])
+    for (const b of document.querySelectorAll(`#${id} button`)) b.setAttribute('aria-pressed', String(+b.dataset.v === rec[key]));
+  // pass and play counts players, not computer teams: 2 to 4
+  $('teamsLabel').textContent = rec.mode === 0 ? 'COMPUTER TEAMS' : 'PLAYERS';
+  const tb = document.querySelectorAll('#pTeams button');
+  tb.forEach(b => { b.textContent = rec.mode === 0 ? b.dataset.v : String(+b.dataset.v + 1); });
+  $('skillOpt').style.display = rec.mode === 0 ? '' : 'none';
+}
+function showMenu() {
+  state = 'menu'; G = null; document.body.classList.remove('playing');
+  for (const id of ['pause', 'over', 'handoff']) $(id).hidden = true; $('menu').hidden = false;
+  hint(''); syncMenu();
+  const el = $('rec'); el.textContent = '';
+  if (rec.games) { el.append('Wins against the computer: '); el.appendChild(Object.assign(document.createElement('b'), { textContent: String(rec.wins) })); }
+  genTerrain(); cam.x = W / 2; cam.y = H * .55;
+}
+
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1); SW = innerWidth; SH = innerHeight;
+  cv.width = Math.round(SW * DPR); cv.height = Math.round(SH * DPR);
+  zoom = Math.min(SH / 760, SW / (SW < SH ? 480 : 720));
+}
+addEventListener('resize', resize);
+let last = 0;
+function frame(t) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(.033, (t - last) / 1000 || 0); last = t;
+  if (state === 'play') { update(dt / 2); update(dt / 2); } else if (state !== 'pause') update(dt);
+  render(); hud(dt);
+}
+resize();
+showMenu();
+requestAnimationFrame(frame);
+if (location.hash === '#debug') window.SW8 = { get G() { return G; }, projs, get state() { return state; }, rec, newGame, explode, solid, get waterY() { return waterY; },
+  run: sec => { for (let k = 0; k < sec * 120 && state === 'play'; k++) update(1 / 120); } };
+})();
+</script>
+</body>
+</html>
