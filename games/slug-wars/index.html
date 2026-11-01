@@ -416,6 +416,12 @@ function launch(type, x, y, vx, vy, owner) {
 }
 function stepProj(p, dt) {
   p.t += dt;
+  // the fuse comes first: a grenade lying still on the ground still has to go off
+  if (p.fuse && p.t >= p.fuse) return 'boom';
+  if (p.rest) {
+    if (solid(p.x, p.y + 3)) return null;
+    p.rest = false;
+  }
   p.vy += GRAV * dt * (p.type === 'missile' ? .4 : 1);
   if (p.wind) p.vx += G.wind * WIND * dt;
   const steps = Math.max(1, Math.ceil(Math.hypot(p.vx, p.vy) * dt / 3));
@@ -425,13 +431,15 @@ function stepProj(p, dt) {
       if (!p.bounce) { p.x = nx; p.y = ny; return 'boom'; }
       const [qx, qy] = normalAt(nx, ny), dot = p.vx * qx + p.vy * qy, damp = p.damp ?? .45;
       p.vx = (p.vx - 2 * dot * qx) * damp; p.vy = (p.vy - 2 * dot * qy) * damp;
-      if (Math.hypot(p.vx, p.vy) > 60) tone(500, .04, .03, 'triangle');
+      const sp = Math.hypot(p.vx, p.vy);
+      if (sp > 60) tone(500, .04, .03, 'triangle');
+      // too slow to bounce again: settle on the ground until the fuse runs out
+      if (sp < 40 && qy < -.5) { p.rest = true; p.vx = p.vy = 0; }
       return 'bounce';
     }
     p.x = nx; p.y = ny;
     if (!p.bounce && p.t > .12) for (const t of G.teams) for (const s of t.slugs) if (s.alive && Math.abs(s.x - p.x) < 11 && p.y > s.y - 22 && p.y < s.y + 2) return 'boom';
   }
-  if (p.fuse && p.t >= p.fuse) return 'boom';
   if (p.y > waterY || p.x < -300 || p.x > W + 300) return 'sink';
   return null;
 }
