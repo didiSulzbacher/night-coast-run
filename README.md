@@ -111,7 +111,7 @@ On touch screens, on-screen buttons appear automatically. Best cash and jobs don
 
 `games/slug-wars/` is a turn-based artillery game in the style of Worms, in a single HTML file.
 
-- Teams of slugs take turns on a destructible island (a new shape every match, with caves and floating islands). Explosions carve craters, knock slugs flying and can drop them into the sea. Slugs that run out of health pop, which can hurt their neighbours.
+- Teams of slugs take turns on destructible terrain, with a new layout every match. Pick one of seven maps or Random: Garden Island, Desert Mesa, Frozen Peaks, Archipelago, Candy Clouds, City Ruins and Lava Cave (which has a roof, so no air strikes, and lava instead of water). Explosions carve craters, knock slugs flying and can drop them into the sea. Slugs that run out of health pop, which can hurt their neighbours.
 - Weapons: bazooka (pushed by the wind), bouncing grenade, cluster bomb, shotgun (two shots), baseball bat, dynamite, air strike and teleport. Crates parachute in with health or extra ammo.
 - Each turn has a 45-second timer, with a few seconds to run after you fire. After a few rounds sudden death starts and the sea rises every turn.
 - Play against 1 to 3 computer teams (Wobbly, Decent or Deadly aim), or pass and play with 2 to 4 players on one device. The computer plans its shots by simulating them through the terrain, wind included.
