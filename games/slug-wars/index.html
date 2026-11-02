@@ -115,6 +115,7 @@ canvas#c{display:block;width:100%;height:100%}
       <div class="opt"><h3>MODE</h3><div class="pick" id="pMode"><button data-v="0">You vs computer</button><button data-v="1">Pass and play</button></div></div>
       <div class="opt"><h3 id="teamsLabel">COMPUTER TEAMS</h3><div class="pick" id="pTeams"><button data-v="1">1</button><button data-v="2">2</button><button data-v="3">3</button></div></div>
       <div class="opt"><h3>SLUGS PER TEAM</h3><div class="pick" id="pSlugs"><button data-v="2">2</button><button data-v="3">3</button><button data-v="4">4</button></div></div>
+      <div class="opt"><h3>MAP</h3><div class="pick" id="pMap"></div></div>
       <div class="opt" id="skillOpt"><h3>COMPUTER AIM</h3><div class="pick" id="pSkill"><button data-v="0">Wobbly</button><button data-v="1">Decent</button><button data-v="2">Deadly</button></div></div>
       <button class="big" id="playBtn">Start the war</button>
       <p class="rec" id="rec"></p>
@@ -150,31 +151,130 @@ const back = document.createElement('canvas'); back.width = W; back.height = H;
 let waterY = H - 70;
 const solid = (x, y) => { x |= 0; y |= 0; if (x < 0 || x >= W || y < 0) return false; if (y >= H) return true; return mask[y * W + x] === 1; };
 
-function genTerrain() {
-  mask.fill(0);
-  const p = [rnd(0, 6.3), rnd(0, 6.3), rnd(0, 6.3), rnd(0, 6.3)];
-  const top = new Float32Array(W);
-  for (let x = 0; x < W; x++) {
-    let h = H * .56 + Math.sin(x * .0035 + p[0]) * 110 + Math.sin(x * .0105 + p[1]) * 50 + Math.sin(x * .027 + p[2]) * 16 + Math.sin(x * .0016 + p[3]) * 60;
-    const f = Math.min(1, x / 240, (W - x) / 240), e = f * f * (3 - 2 * f);
-    top[x] = h * e + (H + 30) * (1 - e);
-  }
-  for (let x = 0; x < W; x++) for (let y = Math.max(0, top[x] | 0); y < H; y++) mask[y * W + x] = 1;
-  const bctx = back.getContext('2d'); bctx.clearRect(0, 0, W, H);
-  bctx.fillStyle = '#4a3322'; bctx.beginPath(); bctx.moveTo(0, H);
-  for (let x = 0; x < W; x += 4) bctx.lineTo(x, top[x] + 14);
-  bctx.lineTo(W, H); bctx.fill();
-  // caves under the surface
-  for (let k = 0; k < 7; k++) {
-    const cx = rnd(300, W - 300), cy = top[cx | 0] + rnd(90, 220), rx = rnd(60, 140), ry = rnd(30, 60);
-    ellipse(cx, cy, rx, ry, 0);
-  }
-  // a couple of floating islands
-  for (let k = 0; k < 2; k++) {
-    const cx = rnd(500, W - 500), cy = top[cx | 0] - rnd(230, 320), rx = rnd(110, 170), ry = rnd(28, 45);
-    if (cy > 140) ellipse(cx, cy, rx, ry, 1);
-  }
+// ---------- maps
+// Each map has its own generator (it fills the terrain mask) and its own look.
+const MAPS = [
+  { id: 'garden', name: 'Garden Island', gen: genGarden, sky: ['#3a6fb5', '#9ac8e8', '#d9ecf5'], hills: 'rgba(70,110,140,.45)', clouds: true,
+    top: [92, 170, 58], top2: [70, 110, 44], soil: [122, 84, 54], pattern: 'check', back: '#4a3322', rim: 'rgba(45,28,16,.75)', water: 'rgba(30,80,150,.85)', foam: 'rgba(160,210,255,.5)' },
+  { id: 'desert', name: 'Desert Mesa', gen: genDesert, sky: ['#d9663a', '#f3b562', '#fbe3b0'], hills: 'rgba(170,90,50,.4)',
+    top: [236, 196, 128], top2: [214, 160, 98], soil: [196, 118, 68], pattern: 'strata', back: '#6b3a20', rim: 'rgba(90,40,20,.7)', water: 'rgba(40,140,150,.85)', foam: 'rgba(190,240,230,.5)' },
+  { id: 'peaks', name: 'Frozen Peaks', gen: genPeaks, sky: ['#121735', '#34507a', '#8fb0d0'], hills: 'rgba(150,180,220,.3)', stars: true,
+    top: [242, 247, 252], top2: [205, 222, 240], soil: [104, 122, 146], pattern: 'check', back: '#2a3648', rim: 'rgba(30,40,60,.7)', water: 'rgba(40,90,140,.9)', foam: 'rgba(220,240,255,.6)' },
+  { id: 'islands', name: 'Archipelago', gen: genIslands, sky: ['#2a8fd0', '#7ed0f0', '#dff6ff'], hills: 'rgba(60,130,170,.35)', clouds: true,
+    top: [238, 214, 150], top2: [220, 190, 120], soil: [150, 108, 70], pattern: 'check', back: '#5a4028', rim: 'rgba(70,45,25,.7)', water: 'rgba(20,120,170,.85)', foam: 'rgba(200,245,255,.6)' },
+  { id: 'candy', name: 'Candy Clouds', gen: genCandy, sky: ['#ff8fcf', '#ffcbe9', '#fff3fa'], hills: 'rgba(255,255,255,.45)', clouds: true,
+    top: [255, 255, 255], top2: [255, 200, 225], soil: [240, 110, 170], pattern: 'stripes', back: '#9a3a6a', rim: 'rgba(120,30,80,.6)', water: 'rgba(150,60,170,.88)', foam: 'rgba(255,200,240,.6)', liquid: 'syrup' },
+  { id: 'ruins', name: 'City Ruins', gen: genRuins, sky: ['#23263a', '#565b74', '#b8aea4'], hills: 'skyline',
+    top: [164, 164, 172], top2: [132, 132, 140], soil: [104, 104, 112], pattern: 'bricks', back: '#2c2d36', rim: 'rgba(20,20,26,.7)', water: 'rgba(70,120,60,.9)', foam: 'rgba(170,230,120,.55)', liquid: 'toxic water' },
+  { id: 'cave', name: 'Lava Cave', gen: genCave, sky: ['#120a0a', '#24110d', '#3a160e'], hills: null, roof: true,
+    top: [128, 96, 84], top2: [96, 74, 66], soil: [74, 58, 54], pattern: 'strata', back: '#1d1312', rim: 'rgba(20,10,8,.8)', water: 'rgba(255,96,24,.94)', foam: 'rgba(255,220,90,.75)', liquid: 'lava' },
+];
+let MAP = MAPS[0];
+const backMask = new Uint8Array(W * H);
+
+function genTerrain(id) {
+  MAP = MAPS.find(m => m.id === id) || pick(MAPS);
+  mask.fill(0); backMask.fill(0);
+  MAP.gen();
   paintLand();
+}
+const smooth = f => f * f * (3 - 2 * f);
+const edgeTaper = (x, h) => { const e = smooth(Math.min(1, x / 240, (W - x) / 240)); return h * e + (H + 30) * (1 - e); };
+function fillBelow(top) { for (let x = 0; x < W; x++) for (let y = Math.max(0, top[x] | 0); y < H; y++) mask[y * W + x] = 1; }
+// remember the ground as it was, so holes dug later show dark dirt behind them
+function keepBack() { backMask.set(mask); }
+function genGarden() {
+  const p = [rnd(0, 6.3), rnd(0, 6.3), rnd(0, 6.3), rnd(0, 6.3)], top = new Float32Array(W);
+  for (let x = 0; x < W; x++) top[x] = edgeTaper(x, H * .56 + Math.sin(x * .0035 + p[0]) * 110 + Math.sin(x * .0105 + p[1]) * 50 + Math.sin(x * .027 + p[2]) * 16 + Math.sin(x * .0016 + p[3]) * 60);
+  fillBelow(top); keepBack();
+  for (let k = 0; k < 7; k++) { const cx = rnd(300, W - 300); ellipse(cx, top[cx | 0] + rnd(90, 220), rnd(60, 140), rnd(30, 60), 0); }
+  for (let k = 0; k < 2; k++) { const cx = rnd(500, W - 500), cy = top[cx | 0] - rnd(230, 320); if (cy > 140) ellipse(cx, cy, rnd(110, 170), rnd(28, 45), 1); }
+}
+function genDesert() {
+  const p = [rnd(0, 6.3), rnd(0, 6.3)], top = new Float32Array(W);
+  for (let x = 0; x < W; x++) {
+    const h = H * .62 + Math.sin(x * .004 + p[0]) * 90 + Math.sin(x * .013 + p[1]) * 30;
+    const t = Math.round(h / 75) * 75; // terraces with short steep steps between them
+    top[x] = edgeTaper(x, t + (h - t) * .2);
+  }
+  // flat-topped mesas with steep sides
+  for (let k = 0; k < 3; k++) {
+    const cx = rnd(400, W - 400), w = rnd(110, 190), y = top[cx | 0] - rnd(170, 260);
+    for (let x = Math.max(0, cx - w - 30 | 0); x < Math.min(W, cx + w + 30); x++) {
+      const f = smooth(clamp((w + 30 - Math.abs(x - cx)) / 30, 0, 1));
+      top[x] = Math.min(top[x], top[x] * (1 - f) + y * f);
+    }
+  }
+  fillBelow(top); keepBack();
+  // a rock arch or two
+  for (let k = 0; k < 2; k++) { const cx = rnd(400, W - 400); ellipse(cx, top[cx | 0] + rnd(70, 110), rnd(50, 80), rnd(40, 60), 0); }
+}
+function genPeaks() {
+  const top = new Float32Array(W), peaks = [];
+  for (let k = 0; k < 6; k++) peaks.push({ x: 250 + k * (W - 500) / 5 + rnd(-90, 90), a: rnd(220, 400), w: rnd(220, 330) });
+  for (let x = 0; x < W; x++) {
+    let h = H * .74 + Math.sin(x * .03) * 8 + Math.sin(x * .011) * 20;
+    for (const pk of peaks) { const f = Math.max(0, 1 - Math.abs(x - pk.x) / pk.w); h -= pk.a * Math.pow(f, 1.25); }
+    top[x] = edgeTaper(x, h);
+  }
+  fillBelow(top); keepBack();
+  for (let k = 0; k < 4; k++) { const cx = rnd(300, W - 300); ellipse(cx, top[cx | 0] + rnd(100, 200), rnd(50, 110), rnd(25, 45), 0); }
+}
+function genIslands() {
+  const n = 5, top = new Float32Array(W).fill(H + 30);
+  for (let k = 0; k < n; k++) {
+    const cx = 220 + k * (W - 440) / (n - 1) + rnd(-60, 60), w = rnd(170, 250), hgt = rnd(150, 300);
+    for (let x = Math.max(0, cx - w | 0); x < Math.min(W, cx + w); x++) {
+      const f = Math.max(0, 1 - ((x - cx) / w) ** 2);
+      top[x] = Math.min(top[x], H - 70 - hgt * Math.pow(f, .55) + Math.sin(x * .05) * 6);
+    }
+  }
+  fillBelow(top); keepBack();
+  for (let k = 0; k < 3; k++) ellipse(rnd(300, W - 300), rnd(330, 460), rnd(70, 110), rnd(18, 28), 1);
+}
+function genCandy() {
+  const p = [rnd(0, 6.3), rnd(0, 6.3)], top = new Float32Array(W);
+  for (let x = 0; x < W; x++) top[x] = edgeTaper(x, H * .72 + Math.sin(x * .006 + p[0]) * 60 + Math.sin(x * .02 + p[1]) * 18);
+  fillBelow(top); keepBack();
+  for (let k = 0; k < 6; k++) { const cx = rnd(300, W - 300); ellipse(cx, top[cx | 0] + rnd(20, 90), rnd(25, 45), rnd(25, 45), 0); }
+  // lots of floating sweets to hop between
+  for (let k = 0; k < 9; k++) {
+    const cx = 200 + k * (W - 400) / 8 + rnd(-60, 60), cy = rnd(260, top[cx | 0] - 150);
+    ellipse(cx, cy, rnd(80, 140), rnd(22, 36), 1);
+  }
+}
+function genRuins() {
+  const top = new Float32Array(W), ground = H * .74;
+  for (let x = 0; x < W; x++) top[x] = edgeTaper(x, ground + Math.sin(x * .02) * 6);
+  fillBelow(top);
+  // hollow buildings: floors with rooms between them and some broken walls
+  let x = 200;
+  while (x < W - 260) {
+    const w = rnd(130, 230), h = rnd(160, 420), x0 = x | 0, x1 = x + w | 0, yTop = ground - h | 0;
+    for (let y = yTop; y < ground; y++) for (let xx = x0; xx < x1; xx++) mask[y * W + xx] = 1;
+    for (let y = yTop + 12; y + 52 < ground; y += 70) {
+      const left = R() < .35 ? x0 : x0 + 12, right = R() < .35 ? x1 : x1 - 12;
+      for (let yy = y; yy < y + 56; yy++) for (let xx = left; xx < right; xx++) mask[yy * W + xx] = 0;
+    }
+    x += w + rnd(60, 170);
+  }
+  keepBack();
+  // girders bridging the gaps
+  for (let k = 0; k < 6; k++) { const gx = rnd(250, W - 400), gy = rnd(ground - 380, ground - 120) | 0, gw = rnd(90, 160) | 0; for (let y = gy; y < gy + 9; y++) for (let xx = gx | 0; xx < gx + gw; xx++) mask[y * W + xx] = 1; }
+}
+function genCave() {
+  const p = [rnd(0, 6.3), rnd(0, 6.3), rnd(0, 6.3)], floor = new Float32Array(W), ceil = new Float32Array(W);
+  const spikes = []; for (let k = 0; k < 9; k++) spikes.push({ x: rnd(100, W - 100), a: rnd(60, 150), w: rnd(30, 60) });
+  for (let x = 0; x < W; x++) {
+    floor[x] = H * .74 + Math.sin(x * .004 + p[0]) * 80 + Math.sin(x * .017 + p[1]) * 25;
+    let c = 170 + Math.sin(x * .005 + p[2]) * 50 + Math.sin(x * .02) * 15;
+    for (const s of spikes) { const f = Math.max(0, 1 - Math.abs(x - s.x) / s.w); c += s.a * f * f; }
+    ceil[x] = c;
+  }
+  for (let x = 0; x < W; x++) for (let y = 0; y < H; y++) if (y < ceil[x] || y >= floor[x] || x < 30 || x >= W - 30) mask[y * W + x] = 1;
+  backMask.fill(1);
+  // rock ledges in the middle of the cave
+  for (let k = 0; k < 4; k++) { const cx = rnd(300, W - 300); ellipse(cx, (ceil[cx | 0] + floor[cx | 0]) / 2 + rnd(-40, 40), rnd(80, 130), rnd(18, 30), 1); }
 }
 function ellipse(cx, cy, rx, ry, v) {
   for (let y = Math.max(0, cy - ry | 0); y < Math.min(H, cy + ry); y++) for (let x = Math.max(0, cx - rx | 0); x < Math.min(W, cx + rx); x++) {
@@ -183,7 +283,7 @@ function ellipse(cx, cy, rx, ry, v) {
   }
 }
 function paintLand() {
-  const img = lctx.createImageData(W, H), d = img.data;
+  const img = lctx.createImageData(W, H), d = img.data, M = MAP;
   for (let x = 0; x < W; x++) {
     let depth = 0;
     for (let y = 0; y < H; y++) {
@@ -191,13 +291,25 @@ function paintLand() {
       if (!mask[i]) { depth = 0; continue; }
       depth++;
       const n = ((x * 73856093 ^ y * 19349663) >>> 0) % 23, j = i * 4;
-      if (depth <= 9) { d[j] = 92 + n; d[j + 1] = 170 + n; d[j + 2] = 58; }
-      else if (depth <= 12) { d[j] = 70; d[j + 1] = 110 + n; d[j + 2] = 44; }
-      else { const s = ((x >> 3) + (y >> 3)) % 2 ? 6 : 0; d[j] = 122 + n + s; d[j + 1] = 84 + n * .6 + s; d[j + 2] = 54 + s; }
-      d[j + 3] = 255;
+      let c;
+      if (depth <= 9) c = M.top; else if (depth <= 12) c = M.top2;
+      else {
+        c = M.soil; let s = 0;
+        if (M.pattern === 'check') s = ((x >> 3) + (y >> 3)) % 2 ? 6 : 0;
+        else if (M.pattern === 'strata') s = [0, 12, -10][((y + Math.sin(x * .01) * 10) >> 4) % 3 & 3] || 0;
+        else if (M.pattern === 'stripes') s = ((x + y) >> 4) % 2 ? 40 : 0;
+        else if (M.pattern === 'bricks') { const row = y >> 3, off = row % 2 ? 8 : 0; s = (y % 8 === 0 || (x + off) % 16 === 0) ? -26 : 0; }
+        d[j] = clamp(c[0] + n + s, 0, 255); d[j + 1] = clamp(c[1] + n * .6 + s, 0, 255); d[j + 2] = clamp(c[2] + s, 0, 255); d[j + 3] = 255;
+        continue;
+      }
+      d[j] = clamp(c[0] + n - 8, 0, 255); d[j + 1] = clamp(c[1] + n - 8, 0, 255); d[j + 2] = clamp(c[2] + n * .3, 0, 255); d[j + 3] = 255;
     }
   }
   lctx.putImageData(img, 0, 0);
+  const bctx = back.getContext('2d'), bimg = bctx.createImageData(W, H), bd = bimg.data;
+  const bc = parseInt(M.back.slice(1), 16), br = bc >> 16, bg = bc >> 8 & 255, bb = bc & 255;
+  for (let i = 0; i < W * H; i++) if (backMask[i]) { const j = i * 4; bd[j] = br; bd[j + 1] = bg; bd[j + 2] = bb; bd[j + 3] = 255; }
+  bctx.putImageData(bimg, 0, 0);
 }
 function carve(cx, cy, r) {
   const r2 = r * r;
@@ -207,7 +319,7 @@ function carve(cx, cy, r) {
   lctx.globalCompositeOperation = 'destination-out';
   lctx.beginPath(); lctx.arc(cx, cy, r, 0, TAU); lctx.fill();
   lctx.globalCompositeOperation = 'source-atop';
-  lctx.strokeStyle = 'rgba(45,28,16,.75)'; lctx.lineWidth = 7; lctx.beginPath(); lctx.arc(cx, cy, r + 3, 0, TAU); lctx.stroke();
+  lctx.strokeStyle = MAP.rim; lctx.lineWidth = 7; lctx.beginPath(); lctx.arc(cx, cy, r + 3, 0, TAU); lctx.stroke();
   lctx.globalCompositeOperation = 'source-over';
 }
 function normalAt(x, y) {
@@ -236,7 +348,7 @@ const WD = Object.fromEntries(WEAPONS.map(w => [w.id, w]));
 
 // ---------- save & settings
 const SAVE = 'slug-wars-v1';
-let rec = { mode: 0, teams: 1, slugs: 3, skill: 1, wins: 0, games: 0 };
+let rec = { mode: 0, teams: 1, slugs: 3, skill: 1, wins: 0, games: 0, map: 'random' };
 try { rec = Object.assign(rec, JSON.parse(localStorage.getItem(SAVE) || '{}')); } catch (e) {}
 function save() { try { localStorage.setItem(SAVE, JSON.stringify(rec)); } catch (e) {} }
 
@@ -271,7 +383,7 @@ let zoom = 1, SW = 0, SH = 0, DPR = 1;
 const keys = {}, touch = {};
 
 function newGame() {
-  genTerrain();
+  genTerrain(rec.map);
   waterY = H - 70;
   for (const a of [projs, parts, floats, crates, graves]) a.length = 0;
   const human = rec.mode === 0 ? [true] : [];
@@ -280,7 +392,7 @@ function newGame() {
   G = { teams: [], turn: -1, turnNo: 0, wind: 0, phase: 'between', timer: 0, retreat: 0, settleT: 0, power: 0, charging: false, shots: 0, cursor: null, active: null, over: false };
   for (let t = 0; t < nTeams; t++) {
     const def = TEAM_DEF[t];
-    const team = { ...def, ai: rec.mode === 0 ? t > 0 : false, slugs: [], next: 0, ammo: Object.fromEntries(WEAPONS.map(w => [w.id, w.ammo])), weapon: 'bazooka' };
+    const team = { ...def, ai: rec.mode === 0 ? t > 0 : false, slugs: [], next: 0, ammo: Object.fromEntries(WEAPONS.map(w => [w.id, w.id === 'air' && MAP.roof ? 0 : w.ammo])), weapon: 'bazooka' };
     for (let k = 0; k < rec.slugs; k++) team.slugs.push({ team, name: names.pop(), hp: 100, alive: true, x: 0, y: 0, vx: 0, vy: 0, face: 1, aim: .5, ground: false, show: 100, wob: R() * 6 });
     G.teams.push(team);
   }
@@ -289,10 +401,11 @@ function newGame() {
   all.forEach((s, k) => {
     for (let tries = 0; tries < 200; tries++) {
       const x = rnd(260, W - 260);
-      if (all.some(o => o !== s && o.x && Math.abs(o.x - x) < 90)) continue;
-      let y = 10; while (y < H && !solid(x, y)) y++;
-      if (y >= waterY - 10) continue;
-      s.x = x; s.y = y - 1; s.face = x < W / 2 ? 1 : -1; s.ground = true; break;
+      const spots = standSpots(x);
+      if (!spots.length) continue;
+      const y = pick(spots);
+      if (all.some(o => o !== s && o.x && Math.hypot(o.x - x, o.y - y) < 90)) continue;
+      s.x = x; s.y = y; s.face = x < W / 2 ? 1 : -1; s.ground = true; break;
     }
   });
   state = 'play';
@@ -332,9 +445,20 @@ function startTurn() {
   selectWeapon(team.weapon);
   tone(660, .1, .05);
 }
+// places a slug could stand at column x: solid underfoot, room above
+function standSpots(x) {
+  const out = [];
+  for (let y = 40; y < waterY - 12; y++) if (solid(x, y + 1) && !solid(x, y) && !solid(x, y - 10) && !solid(x, y - 22)) out.push(y);
+  return out;
+}
 function dropCrate() {
   const x = rnd(300, W - 300), type = R() < .45 ? 'health' : 'weapon';
-  crates.push({ x, y: -40, vy: 0, type, w: type === 'weapon' ? pick(['cluster', 'dynamite', 'air', 'teleport']) : null, para: true, landed: false });
+  const w = type === 'weapon' ? pick(MAP.roof ? ['cluster', 'dynamite', 'teleport'] : ['cluster', 'dynamite', 'air', 'teleport']) : null;
+  if (MAP.roof) {
+    // no sky to parachute from: the crate just turns up on a ledge
+    const spots = standSpots(x); if (!spots.length) return;
+    crates.push({ x, y: pick(spots), vy: 0, type, w, para: false, landed: true });
+  } else crates.push({ x, y: -40, vy: 0, type, w, para: true, landed: false });
 }
 function gameOver(winner) {
   G.over = true; state = 'over'; document.body.classList.remove('playing');
@@ -394,7 +518,7 @@ function drown(s) {
   if (!s.alive) return;
   s.alive = false; s.hp = 0; s.show = 0;
   splash(clamp(s.x, 0, W), waterY);
-  floats.push({ x: s.x, y: waterY - 30, t: 1.8, text: `${s.name} drowned`, c: '#9fd0ff' });
+  floats.push({ x: s.x, y: waterY - 30, t: 1.8, text: MAP.liquid === 'lava' ? `${s.name} burned up` : `${s.name} drowned`, c: MAP.liquid === 'lava' ? '#ffb070' : '#9fd0ff' });
   noise(.6, 900, .3);
 }
 function hurt(s, d) {
@@ -753,15 +877,21 @@ function render() {
   const d = DPR;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   const g = ctx.createLinearGradient(0, 0, 0, SH * d);
-  g.addColorStop(0, '#3a6fb5'); g.addColorStop(.6, '#9ac8e8'); g.addColorStop(1, '#d9ecf5');
+  g.addColorStop(0, MAP.sky[0]); g.addColorStop(.6, MAP.sky[1]); g.addColorStop(1, MAP.sky[2]);
   ctx.fillStyle = g; ctx.fillRect(0, 0, cv.width, cv.height);
+  if (MAP.stars) { ctx.fillStyle = '#fff'; for (let k = 0; k < 90; k++) { const x = (k * 977 % 1000) / 1000 * cv.width, y = (k * 571 % 1000) / 1000 * cv.height * .6; ctx.globalAlpha = .4 + (k % 5) / 8 + Math.sin(time * 2 + k) * .15; ctx.fillRect(x, y, 2 * d, 2 * d); } ctx.globalAlpha = 1; }
   const sx = (R() - .5) * shake, sy = (R() - .5) * shake;
   // far hills, drawn with a little parallax
   ctx.setTransform(zoom * d, 0, 0, zoom * d, (SW / 2 - cam.x * zoom * .5 + sx) * d, (SH / 2 - cam.y * zoom * .7 + sy) * d);
-  ctx.fillStyle = 'rgba(70,110,140,.45)'; ctx.beginPath(); ctx.moveTo(-800, H);
-  for (let x = -800; x <= W + 800; x += 40) ctx.lineTo(x, H * .55 + Math.sin(x * .004) * 60 + Math.sin(x * .011) * 25);
-  ctx.lineTo(W + 800, H); ctx.fill();
-  for (let k = 0; k < 6; k++) { const cx = ((k * 520 + time * 12 * (G ? G.wind * 4 + 1 : 1)) % (W + 1200)) - 600, cy = 120 + k * 37 % 140; ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.beginPath(); ctx.ellipse(cx, cy, 90, 26, 0, 0, TAU); ctx.ellipse(cx + 50, cy - 14, 60, 24, 0, 0, TAU); ctx.fill(); }
+  if (MAP.hills === 'skyline') {
+    ctx.fillStyle = 'rgba(40,42,58,.75)';
+    for (let x = -800, k = 0; x < W + 800; x += 70, k++) { const h = 120 + (k * 53 % 7) * 40; ctx.fillRect(x, H * .7 - h, 62, h + 400); }
+  } else if (MAP.hills) {
+    ctx.fillStyle = MAP.hills; ctx.beginPath(); ctx.moveTo(-800, H);
+    for (let x = -800; x <= W + 800; x += 40) ctx.lineTo(x, H * .55 + Math.sin(x * .004) * 60 + Math.sin(x * .011) * 25);
+    ctx.lineTo(W + 800, H); ctx.fill();
+  }
+  if (MAP.clouds) for (let k = 0; k < 6; k++) { const cx = ((k * 520 + time * 12 * (G ? G.wind * 4 + 1 : 1)) % (W + 1200)) - 600, cy = 120 + k * 37 % 140; ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.beginPath(); ctx.ellipse(cx, cy, 90, 26, 0, 0, TAU); ctx.ellipse(cx + 50, cy - 14, 60, 24, 0, 0, TAU); ctx.fill(); }
   ctx.setTransform(zoom * d, 0, 0, zoom * d, (SW / 2 - cam.x * zoom + sx) * d, (SH / 2 - cam.y * zoom + sy) * d);
   ctx.drawImage(back, 0, 0); ctx.drawImage(land, 0, 0);
   if (!G) { drawWater(); return; }
@@ -781,11 +911,12 @@ function render() {
   ctx.globalAlpha = 1;
 }
 function drawWater() {
-  ctx.fillStyle = 'rgba(30,80,150,.85)';
+  if (MAP.liquid === 'lava') { const gl = ctx.createLinearGradient(0, waterY - 120, 0, waterY); gl.addColorStop(0, 'rgba(255,90,20,0)'); gl.addColorStop(1, 'rgba(255,90,20,.35)'); ctx.fillStyle = gl; ctx.fillRect(-1000, waterY - 120, W + 2000, 120); }
+  ctx.fillStyle = MAP.water;
   ctx.beginPath(); ctx.moveTo(-1000, H + 400);
   for (let x = -1000; x <= W + 1000; x += 30) ctx.lineTo(x, waterY + Math.sin(x * .02 + time * 2) * 5);
   ctx.lineTo(W + 1000, H + 400); ctx.fill();
-  ctx.fillStyle = 'rgba(160,210,255,.5)';
+  ctx.fillStyle = MAP.foam;
   for (let x = -1000; x <= W + 1000; x += 90) ctx.fillRect(x + Math.sin(time + x) * 10, waterY + 8 + Math.sin(x * .02 + time * 2) * 5, 30, 3);
 }
 function drawSlug(s) {
@@ -965,13 +1096,22 @@ function syncMenu() {
   tb.forEach(b => { b.textContent = rec.mode === 0 ? b.dataset.v : String(+b.dataset.v + 1); });
   $('skillOpt').style.display = rec.mode === 0 ? '' : 'none';
 }
+function buildMapPick() {
+  const el = $('pMap'); el.textContent = '';
+  for (const m of [{ id: 'random', name: 'Random' }, ...MAPS]) {
+    const b = document.createElement('button'); b.textContent = m.name; b.setAttribute('aria-pressed', String((rec.map || 'random') === m.id));
+    b.addEventListener('click', () => { rec.map = m.id; save(); buildMapPick(); genTerrain(m.id); cam.x = W / 2; cam.y = H * .55; });
+    el.appendChild(b);
+  }
+}
 function showMenu() {
   state = 'menu'; G = null; document.body.classList.remove('playing');
+  buildMapPick();
   for (const id of ['pause', 'over', 'handoff']) $(id).hidden = true; $('menu').hidden = false;
   hint(''); syncMenu();
   const el = $('rec'); el.textContent = '';
   if (rec.games) { el.append('Wins against the computer: '); el.appendChild(Object.assign(document.createElement('b'), { textContent: String(rec.wins) })); }
-  genTerrain(); cam.x = W / 2; cam.y = H * .55;
+  genTerrain(rec.map); cam.x = W / 2; cam.y = H * .55;
 }
 
 function resize() {
@@ -991,6 +1131,7 @@ resize();
 showMenu();
 requestAnimationFrame(frame);
 if (location.hash === '#debug') window.SW8 = { get G() { return G; }, projs, get state() { return state; }, rec, newGame, explode, solid, get waterY() { return waterY; },
+  MAPS, get MAP() { return MAP; }, standSpots,
   run: sec => { for (let k = 0; k < sec * 120 && state === 'play'; k++) update(1 / 120); } };
 })();
 </script>
