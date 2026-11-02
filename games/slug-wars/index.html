@@ -650,6 +650,11 @@ function update(dt) {
   if (G.phase === 'aim' || G.phase === 'fired') {
     G.timer -= dt;
     if (G.phase === 'aim' && G.timer <= 0) { G.phase = 'fired'; G.retreat = 0; G.charging = false; hint(''); }
+    // the slug whose turn it is drowned or ran out of health: no point waiting for the clock
+    if (s && (!s.alive || s.hp <= 0)) {
+      if (G.phase === 'aim') { G.phase = 'fired'; G.charging = false; hint(''); }
+      G.retreat = 0;
+    }
   }
   if ((G.phase === 'aim' || (G.phase === 'fired' && G.retreat > 0)) && s && s.alive) {
     if (team.ai && G.phase === 'aim') aiTurn(dt);
