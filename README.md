@@ -116,3 +116,13 @@ On touch screens, on-screen buttons appear automatically. Best cash and jobs don
 - Each turn has a 45-second timer, with a few seconds to run after you fire. After a few rounds sudden death starts and the sea rises every turn.
 - Play against 1 to 3 computer teams (Wobbly, Decent or Deadly aim), or pass and play with 2 to 4 players on one device. The computer plans its shots by simulating them through the terrain, wind included.
 - Controls: arrow keys to crawl and aim, Enter to jump, hold Space to power up and release to fire, 1–8 or Q for weapons, click or move the cursor and press Space for air strikes and teleports, drag to look around, P to pause. On touch screens there are on-screen buttons.
+
+# Bumblings
+
+`games/bumblings/` is a puzzle game in the style of Lemmings, in a single HTML file.
+
+- The Bumblings drop out of a hatch and keep walking, off cliffs and into water or lava if you let them. Give individual Bumblings jobs to get enough of them to the exit before time runs out.
+- All eight classic skills: Climber, Floater, Bomber, Blocker, Builder (12-brick staircases; give the job again while it shrugs to keep building), Basher, Miner and Digger. The terrain is pixel-precise and destructible, except for steel, which can't be dug. Falls that are too high are fatal unless the Bumbling is a Floater.
+- Ten levels that introduce the skills one at a time and then combine them, each with a limited number of each skill and a rescue target. Every level has been checked by a scripted solution, and none can be cleared without using skills.
+- Release-rate dial, pause, fast forward, a two-click nuke, and a minimap to scroll the level. Unlocked levels and best results are saved in the browser.
+- Controls: pick a skill, then click or tap a Bumbling. 1–8 pick skills, − and + change the release rate, P pauses, F fast-forwards, Esc opens the level menu, and the arrow keys or dragging scroll. Phones work best held sideways.
