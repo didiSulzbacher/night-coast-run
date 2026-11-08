@@ -439,6 +439,7 @@ function nextTurn() {
 }
 function startTurn() {
   const team = G.teams[G.turn];
+  if (team.ammo[team.weapon] <= 0) team.weapon = 'bazooka';
   G.phase = 'aim';
   if (team.ai) G.ai = { t: .9, plan: null };
   banner(team.ai ? `${team.name}` : (rec.mode === 0 ? 'Your turn' : team.name), G.active.name, team.color, 1.3);
@@ -593,7 +594,7 @@ function splash(x, y) {
 function aimAngle(s, aim = s.aim) { return s.face > 0 ? -aim : Math.PI + aim; }
 function fireWeapon() {
   const team = G.teams[G.turn], s = G.active, id = team.weapon, w = WD[id];
-  if (team.ammo[id] <= 0) return;
+  if (team.ammo[id] <= 0) { G.charging = false; G.power = 0; return; }
   const a = aimAngle(s), mx = s.x + Math.cos(a) * 16, my = s.y - 12 + Math.sin(a) * 16;
   if (id === 'bazooka' || id === 'grenade' || id === 'cluster') {
     const sp = 260 + G.power * 940;
@@ -622,7 +623,12 @@ function fireWeapon() {
   G.phase = 'fired'; G.retreat = id === 'teleport' ? .4 : 3; G.charging = false; G.power = 0;
   hint('');
 }
-function useAmmo(team, id) { if (team.ammo[id] !== Infinity) team.ammo[id]--; buildWeaponBar(); }
+function useAmmo(team, id) {
+  if (team.ammo[id] !== Infinity) team.ammo[id]--;
+  // out of that one: fall back to the bazooka so the next turn starts with something that fires
+  if (team.ammo[id] <= 0 && team.weapon === id) team.weapon = 'bazooka';
+  buildWeaponBar();
+}
 function canStand(x, y) { return y > 10 && y < waterY - 20 && !solid(x, y) && !solid(x, y - 16) && x > 20 && x < W - 20; }
 function shotgun(s, a) {
   let x = s.x, y = s.y - 12;
@@ -715,6 +721,13 @@ function aiPlan() {
       if (sc > best.score) best = { score: sc, weapon: 'shotgun', face: Math.sign(dx) || 1, aim: Math.atan2(-dy, Math.abs(dx)), power: 0 };
     }
   }
+  // dynamite at the feet of a close enemy, as long as no teammate is near: we run for it afterwards
+  if (team.ammo.dynamite > 0) {
+    let sc = 0, friend = false;
+    for (const o of enemies) { const d = Math.hypot(o.x - s.x, o.y - s.y); if (d < 80) sc += 75 * (1 - d / 125) + (o.hp <= 60 ? 40 : 0); }
+    for (const f of team.slugs) if (f !== s && f.alive && Math.hypot(f.x - s.x, f.y - s.y) < 140) friend = true;
+    if (!friend && sc > best.score) best = { score: sc, weapon: 'dynamite', face: s.face, aim: s.aim, power: 0 };
+  }
   if (team.ammo.air > 0) {
     // an air strike on a group of enemies out in the open
     for (const o of enemies) {
@@ -725,8 +738,49 @@ function aiPlan() {
   }
   // the worse the skill, the shakier the hand
   const err = [.16, .07, .02][skill], perr = [.16, .07, .02][skill];
-  if (best.aim !== undefined && best.weapon !== 'bat') { best.aim += rnd(-err, err); best.power = clamp(best.power * (1 + rnd(-perr, perr)), .05, 1); }
+  if (best.aim !== undefined && best.weapon !== 'bat' && best.weapon !== 'dynamite') { best.aim += rnd(-err, err); best.power = clamp(best.power * (1 + rnd(-perr, perr)), .05, 1); }
   return best;
+}
+// in trouble: close to the water, or badly hurt with an enemy right next to us
+function aiDanger(s) {
+  const enemies = G.teams.filter(t => t !== s.team).flatMap(t => t.slugs.filter(o => o.alive));
+  const near = enemies.some(o => Math.hypot(o.x - s.x, o.y - s.y) < 150);
+  return s.y > waterY - 70 || (s.hp < 40 && near);
+}
+// somewhere better to stand: a clear line to an enemy at a comfortable range, high above the water
+function teleportSpot(s) {
+  const enemies = G.teams.filter(t => t !== s.team).flatMap(t => t.slugs.filter(o => o.alive));
+  let best = null;
+  for (let k = 0; k < 60; k++) {
+    const x = rnd(80, W - 80), spots = standSpots(x);
+    if (!spots.length) continue;
+    const y = spots[0];
+    if (y > waterY - 110) continue;
+    let v = Math.min(30, (waterY - y) / 12), nearest = 1e9;
+    for (const o of enemies) {
+      const d = Math.hypot(o.x - x, o.y - y); nearest = Math.min(nearest, d);
+      if (d < 650 && clearLine(x, y - 12, o.x, o.y - 10)) v += 18;
+    }
+    if (nearest < 130) v -= 40; else v += 30 - Math.abs(nearest - 380) / 12;
+    for (const f of s.team.slugs) if (f !== s && f.alive && Math.hypot(f.x - x, f.y - y) < 100) v -= 15;
+    if (!best || v > best.v) best = { x, y, v };
+  }
+  return best;
+}
+function aiRetreat(dt) {
+  const s = G.active;
+  if (!s.ground) return;
+  let threat = null;
+  for (const p of projs) if (p.fuse && Math.hypot(p.x - s.x, p.y - s.y) < 140) threat = p;
+  if (!threat) return;
+  const dir = Math.sign(s.x - threat.x) || -s.face;
+  const before = s.x; walk(s, dir, dt);
+  if (Math.abs(s.x - before) < .2) jump(s);
+}
+function nearestEnemy(s) {
+  let near = null;
+  for (const t of G.teams) if (t !== s.team) for (const o of t.slugs) if (o.alive && (!near || Math.abs(o.x - s.x) < Math.abs(near.x - s.x))) near = o;
+  return near;
 }
 function clearLine(x0, y0, x1, y1) {
   const d = Math.hypot(x1 - x0, y1 - y0), n = Math.ceil(d / 6);
@@ -739,19 +793,38 @@ function aiTurn(dt) {
   if (!G.teams.some(t => t !== team && t.slugs.some(o => o.alive))) { G.phase = 'fired'; G.retreat = 0; G.charging = false; return; }
   if (ai.t > 0) { ai.t -= dt; return; }
   if (!ai.plan) {
-    ai.plan = aiPlan();
-    selectWeapon(ai.plan.weapon);
-    // nothing worth shooting at: crawl toward the nearest enemy and look again
-    if (ai.plan.score <= 4 && !ai.walked) {
-      const enemies = G.teams.filter(t => t !== team).flatMap(t => t.slugs.filter(o => o.alive));
-      let near = enemies[0]; for (const o of enemies) if (Math.abs(o.x - s.x) < Math.abs(near.x - s.x)) near = o;
-      ai.walk = 1.6; ai.dir = Math.sign(near.x - s.x) || 1; ai.walked = true; ai.plan = null;
+    ai.walks = ai.walks || 0;
+    // get out of trouble first
+    if (team.ammo.teleport > 0 && !ai.teleported && aiDanger(s)) {
+      const spot = teleportSpot(s);
+      if (spot) { ai.teleported = true; ai.plan = { weapon: 'teleport', target: { x: spot.x, y: spot.y }, score: 50 }; selectWeapon('teleport'); return; }
     }
+    ai.plan = aiPlan();
+    // no good shot: crawl toward the nearest enemy and look again (twice at most), then try a teleport
+    if (ai.plan.score < 15 && ai.walks < 2) {
+      const near = nearestEnemy(s);
+      ai.walk = rnd(1.4, 2.6); ai.dir = near ? Math.sign(near.x - s.x) || 1 : s.face; ai.walks++; ai.plan = null; ai.lastX = s.x; ai.stuck = 0;
+      return;
+    }
+    if (ai.plan.score < 15 && team.ammo.teleport > 0 && !ai.teleported) {
+      const spot = teleportSpot(s);
+      if (spot && spot.v > 25) { ai.teleported = true; ai.plan = { weapon: 'teleport', target: { x: spot.x, y: spot.y }, score: 20 }; }
+    }
+    selectWeapon(ai.plan.weapon);
     return;
   }
-  if (ai.walk > 0) { ai.walk -= dt; walk(s, ai.dir, dt); if (ai.walk <= 0) ai.t = .3; return; }
+  if (ai.walk > 0) {
+    ai.walk -= dt; walk(s, ai.dir, dt);
+    // stuck against a bump: hop over it
+    if (Math.abs(s.x - ai.lastX) < .5) { ai.stuck += dt; if (ai.stuck > .35 && s.ground) { jump(s); ai.stuck = 0; } } else ai.stuck = 0;
+    ai.lastX = s.x;
+    // don't crawl into the sea
+    if (s.ground && !standSpots(s.x + ai.dir * 30).some(y => Math.abs(y - s.y) < 40)) ai.walk = 0;
+    if (ai.walk <= 0) ai.t = .3;
+    return;
+  }
   const p = ai.plan;
-  if (p.weapon === 'air') { G.cursor = p.target; ai.fireT = (ai.fireT || .8) - dt; if (ai.fireT <= 0) fireWeapon(); return; }
+  if (p.weapon === 'air' || p.weapon === 'teleport') { G.cursor = p.target; ai.fireT = (ai.fireT || .8) - dt; if (ai.fireT <= 0) { ai.fireT = 0; fireWeapon(); } return; }
   s.face = p.face;
   const da = p.aim - s.aim;
   if (Math.abs(da) > .02) { s.aim += clamp(da, -1.6 * dt, 1.6 * dt); return; }
@@ -782,6 +855,7 @@ function update(dt) {
   }
   if ((G.phase === 'aim' || (G.phase === 'fired' && G.retreat > 0)) && s && s.alive) {
     if (team.ai && G.phase === 'aim') aiTurn(dt);
+    else if (team.ai) aiRetreat(dt);
     else if (!team.ai) humanControl(dt);
   }
   if (G.phase === 'fired') G.retreat -= dt;
@@ -847,7 +921,9 @@ function humanControl(dt) {
 }
 function fireDown() {
   if (!G || state !== 'play' || G.phase !== 'aim' || G.teams[G.turn].ai) return;
-  const w = WD[G.teams[G.turn].weapon];
+  const team = G.teams[G.turn];
+  if (team.ammo[team.weapon] <= 0) { hint(`Out of ${WD[team.weapon].name}: pick another weapon`); return; }
+  const w = WD[team.weapon];
   if (w.charge) { G.charging = true; G.power = 0; } else fireWeapon();
 }
 function fireUp() { if (G && G.charging && G.phase === 'aim' && !G.teams[G.turn].ai) fireWeapon(); }
